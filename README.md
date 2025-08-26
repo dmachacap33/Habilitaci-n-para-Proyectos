@@ -21,3 +21,4 @@ La función de proxy para Gemini también recupera la clave directamente desde l
 - Los correos de **Recibido** y **Devolución** se envían desde Apps Script. **Recibido** solo notifica la recepción a SST, MA, RSE, responsable del proyecto y correo de la empresa; **Devolución** adjunta automáticamente el PDF de la carpeta a la empresa y responsable del proyecto.
 - Se añadió un tour interactivo que guía al usuario por el Dashboard y la creación de proyectos la primera vez que ingresa.
 - El tour ahora es dinámico y adapta sus pasos según el rol (administrador, responsables SST/MA/RSE o empresa).
+- El pop del tour usa un degradado azul y recorre Dashboard, Cards Empresa, YPFB, LS.025, Personal, Vehículos y Resumen explicando su uso.
