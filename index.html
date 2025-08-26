@@ -1565,6 +1565,7 @@ let ls025FilteredIds = null;
 let conversation = JSON.parse(localStorage.getItem('aiConversation') || 'null');
 let HISTORIAL = {};
 let currentProyecto = null;
+let pendingWrites = 0;
 if (!conversation) {
   conversation = [{
     role: 'model',
@@ -1581,8 +1582,11 @@ function saveConversation(){
 function persistDB(){
   if (database) {
     const snapshot = JSON.parse(JSON.stringify(DBCACHE));
+    pendingWrites++;
     database.ref().set(snapshot)
+      .then(()=>{ pendingWrites = Math.max(0, pendingWrites-1); })
       .catch(error=>{
+        pendingWrites = Math.max(0, pendingWrites-1);
         console.error("Error al guardar datos en Firebase:", error);
         alert("Error: No se pudieron guardar los cambios en la nube.");
       });
@@ -1651,8 +1655,10 @@ function cargarDatosDesdeFirebase(){
   }
   const dbRef = database.ref();
   dbRef.on('value', snapshot => {
-    const data = snapshot.val();
-    DBCACHE = data || {};
+    if(pendingWrites>0){ pendingWrites--; return; }
+    const data = snapshot.val() || {};
+    Object.keys(DBCACHE).forEach(k=>delete DBCACHE[k]);
+    Object.assign(DBCACHE, data);
     console.log("Datos sincronizados con Firebase.");
     renderDashboard();
     refreshSelectorsAll();
