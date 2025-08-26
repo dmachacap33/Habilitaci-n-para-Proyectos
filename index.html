@@ -1560,6 +1560,7 @@ let USERS = JSON.parse(localStorage.getItem("usuariosApp")||"{}") || {};
 let USUARIO = JSON.parse(localStorage.getItem("usuarioActual") || sessionStorage.getItem("usuarioActual") || "null") || {nombre:"", correo:"", codigo:"", admin:false};
 let READONLY = false;
 let ES_RESPONSABLE = false;
+let USER_ROLES = new Set();
 let ls025FilteredIds = null;
 let conversation = JSON.parse(localStorage.getItem('aiConversation') || 'null');
 let HISTORIAL = {};
@@ -1682,7 +1683,7 @@ function refreshEmpresaList(){
     const n=emp?.empresa?.datos?.empresa || emp?.empresa?.nombre;
     if(!n) return false;
     if(ES_RESPONSABLE && !USUARIO.admin){
-      return Object.values(emp.proyectos||{}).some(pr=> pr.proyecto?.responsables?.proyecto?.correo===USUARIO.correo);
+      return Object.values(emp.proyectos||{}).some(pr=> esResponsableEnProyecto(pr, USUARIO.correo));
     }
     return true;
   });
@@ -1698,27 +1699,60 @@ function toggleAdminUI(isAdmin){
 }
 
 function toggleResponsableUI(isResp){
-  const respTab=document.querySelector('[data-tab="resp"]');
+  const active = document.querySelector('.sidebar .tab.active')?.dataset.tab;
   if(isResp){
+    let allowed=new Set(['cards','ypfb','resp']);
     READONLY=true;
-    if(respTab) respTab.style.display="flex";
+    if(USER_ROLES.has('SST')){
+      ['empresa','ls025','personal','vehiculos','resumen'].forEach(t=>allowed.add(t));
+      READONLY=false;
+    }
+    if(USER_ROLES.has('MA') || USER_ROLES.has('RSE')){
+      ['ls025','resumen'].forEach(t=>allowed.add(t));
+      READONLY=false;
+    }
     document.querySelectorAll('.sidebar .tab').forEach(t=>{
-      const allowed=['cards','resp'];
-      if(!allowed.includes(t.dataset.tab)) t.style.display='none';
+      t.style.display = allowed.has(t.dataset.tab) ? 'flex' : 'none';
     });
-    switchTab('cards');
+    if(!active || !allowed.has(active)) switchTab('cards');
   }else{
-    if(respTab) respTab.style.display='none';
+    READONLY=false;
     document.querySelectorAll('.sidebar .tab').forEach(t=>{t.style.display='';});
   }
 }
 
+function esResponsableEnProyecto(pr, correo){
+  const resp = pr?.proyecto?.responsables || {};
+  return resp.proyecto?.correo===correo || resp.sst?.correo===correo || resp.ma?.correo===correo || resp.rse?.correo===correo;
+}
+
+function tieneAsignacionResponsable(correo){
+  if(!correo) return false;
+  return Object.values(DBCACHE).some(emp=>
+    Object.values(emp.proyectos||{}).some(pr=> esResponsableEnProyecto(pr, correo))
+  );
+}
+
+function rolesUsuario(correo){
+  const roles = new Set();
+  if(!correo) return roles;
+  Object.values(DBCACHE).forEach(emp=>{
+    Object.values(emp.proyectos||{}).forEach(pr=>{
+      const resp = pr.proyecto?.responsables || {};
+      if(resp.sst?.correo===correo) roles.add('SST');
+      if(resp.ma?.correo===correo) roles.add('MA');
+      if(resp.rse?.correo===correo) roles.add('RSE');
+    });
+  });
+  return roles;
+}
+
 function checkResponsableRole(){
   ES_RESPONSABLE=false;
+  USER_ROLES = new Set();
   if(!USUARIO || !USUARIO.correo) return;
-  ES_RESPONSABLE = Object.values(DBCACHE).some(emp=>
-    Object.values(emp.proyectos||{}).some(pr=> pr.proyecto?.responsables?.proyecto?.correo===USUARIO.correo)
-  );
+  ES_RESPONSABLE = tieneAsignacionResponsable(USUARIO.correo);
+  if(ES_RESPONSABLE) USER_ROLES = rolesUsuario(USUARIO.correo);
   if(!USUARIO.admin) toggleResponsableUI(ES_RESPONSABLE);
 }
 
@@ -1739,6 +1773,10 @@ function confirmLogin(){
     if(pass1!==pass2){alert("Las contraseñas no coinciden");return;}
     u={codigo,nombre,correo,pass:pass1,fecha:new Date().toISOString(), ultimoLogin:new Date().toISOString()};
     USERS[codigo]=u;
+  }
+  if(correo!=="david.machaca@ypfbtransporte.com.bo" && !tieneAsignacionResponsable(correo)){
+    alert("No tiene responsabilidades asignadas en ningún proyecto.");
+    return;
   }
   localStorage.setItem("usuariosApp",JSON.stringify(USERS));
   if(database){
@@ -1920,6 +1958,29 @@ const GUIAS_PERFILES = {
 const GUIAS_LABELS = {
   GM_VISION:"Visión", GM_EEG:"Electroencefalograma", GM_AUDIO_EQ:"Audiometría y equilibrio", GM_ECG:"Electrocardiograma",
   GM_INF_MED:"Informe Médico", GM_OBES:"Obesidad", GM_ESPIRO:"Espirometría", GM_SANGRE:"Pruebas de sangre"
+};
+
+const MAP_PERSONAL_TO_LS025 = {
+  P_DOC_CI:"L018",
+  P_CUR_1AUX:"L019",
+  P_CUR_INC:"L020",
+  P_CUR_EPP:"L021",
+  P_CUR_ERG:"L022",
+  P_CUR_COM_PEL:"L023",
+  P_CUR_ESPEC:"L025",
+  P_VAC_FA:"L026",
+  P_VAC_DIF_TET:"L027",
+  P_VAC_INFLU:"L028"
+};
+
+const MAP_VEH_TO_LS025 = {
+  V_LISTADO:"L059",
+  V_CHECKLIST:"L060",
+  V_RUAT_CRPVA:"L061",
+  V_ITV:"L062",
+  V_SOAT:"L062",
+  V_POLIZA_RC:"L063",
+  V_SATELITAL:"L064"
 };
 
 /* ================== Utilidades ================== */
@@ -2178,15 +2239,15 @@ function estadoPersonal(arr){
   if(!arr || !arr.length) return "SIN PERSONAL";
   const vals=[];
   arr.forEach(p=>{
-    Object.values(p.requisitos||{}).forEach(v=>{ if(v) vals.push(v); });
-    (p.guiasMedicas||[]).forEach(g=> Object.values(g.items||{}).forEach(v=>{ if(v) vals.push(v); }));
+    Object.values(p.requisitos||{}).forEach(v=>{ if(v && v!=='NA') vals.push(v); });
+    (p.guiasMedicas||[]).forEach(g=> Object.values(g.items||{}).forEach(v=>{ if(v && v!=='NA') vals.push(v); }));
   });
   return computeEstadoRapido_SPN(vals);
 }
 function estadoVehiculos(arr){
   if(!arr || !arr.length) return "SIN VEHICULO";
   const vals=[];
-  arr.forEach(v=> Object.values(v.requisitos||{}).forEach(x=>{ if(x) vals.push(x); }) );
+  arr.forEach(v=> Object.values(v.requisitos||{}).forEach(x=>{ if(x && x!=='NA') vals.push(x); }) );
   return computeEstadoRapido_SPN(vals);
 }
 function estadoProyecto(pr){
@@ -2205,7 +2266,7 @@ function renderDashboard(){
     const nombre = emp?.empresa?.datos?.empresa || emp?.empresa?.nombre;
     if(!nombre) return false;
     if(ES_RESPONSABLE && !USUARIO.admin){
-      return Object.values(emp.proyectos||{}).some(pr=> pr.proyecto?.responsables?.proyecto?.correo===USUARIO.correo);
+      return Object.values(emp.proyectos||{}).some(pr=> esResponsableEnProyecto(pr, USUARIO.correo));
     }
     return true;
   });
@@ -2219,7 +2280,7 @@ function renderDashboard(){
     const proyectos = Object.keys(emp.proyectos||{}).filter(pid=>{
       if(ES_RESPONSABLE && !USUARIO.admin){
         const pr=emp.proyectos[pid];
-        return pr.proyecto?.responsables?.proyecto?.correo===USUARIO.correo;
+        return esResponsableEnProyecto(pr, USUARIO.correo);
       }
       return true;
     }).map(pid=>{
@@ -2324,7 +2385,7 @@ function renderResponsable(){
   Object.entries(DBCACHE).forEach(([clave,emp])=>{
     const nombreEmp = emp.empresa?.datos?.empresa || emp.empresa?.nombre || clave;
     Object.entries(emp.proyectos||{}).forEach(([pid,pr])=>{
-      if(pr.proyecto?.responsables?.proyecto?.correo === correo){
+      if(esResponsableEnProyecto(pr, correo)){
         const est = estadoProyecto(pr);
         const logs = (pr.historial||[]).map(h=>`<div class="hist-item">${h.fecha||""} — ${h.responsable||""}: ${h.accion||""}</div>`).join("") || "<div class='note'>Sin registros</div>";
         const card = `<div class="cardx resp-card"><h4>${nombreEmp} / ${pid}</h4><div class="status ${cls(est)}">${est}</div><details><summary>Ver seguimiento</summary><div class="log">${logs}</div></details></div>`;
@@ -2775,6 +2836,41 @@ function guardarLS025(){
   persistDB();
 }
 
+function actualizarLS025(reqId, comentario, clave, pid){
+  const pr = ensureProyecto(clave,pid);
+  if(!pr.ls025) pr.ls025 = {respuestas:[]};
+  const arr = pr.ls025.respuestas;
+  let r = arr.find(x=>x.reqId===reqId);
+  const txt = `${USUARIO.nombre}: ${comentario}`;
+  if(!r){
+    r = {reqId, valor:"N", comentario:txt, autor:USUARIO.correo||"", modificadoEn:nowIso()};
+    arr.push(r);
+  }else{
+    r.valor = "N";
+    r.comentario = r.comentario ? r.comentario+"; "+txt : txt;
+    r.autor = USUARIO.correo||"";
+    r.modificadoEn = nowIso();
+  }
+  persistDB();
+  buildLs025();
+}
+
+function autoLs025FromPersonal(code, comentario){
+  const reqId = MAP_PERSONAL_TO_LS025[code];
+  if(!reqId) return;
+  const clave=$("#per-empresaSel").value;
+  const pid=$("#per-proyectoSel").value;
+  actualizarLS025(reqId, comentario, clave, pid);
+}
+
+function autoLs025FromVeh(code, comentario){
+  const reqId = MAP_VEH_TO_LS025[code];
+  if(!reqId) return;
+  const clave=$("#veh-empresaSel").value;
+  const pid=$("#veh-proyectoSel").value;
+  actualizarLS025(reqId, comentario, clave, pid);
+}
+
 /* ================== Personal ================== */
 let editingPersonaIndex=-1;
 function proyectoActualPersonal(){
@@ -2805,14 +2901,19 @@ function renderTablaPersonal(){
   const addBtn=$("#panel-personal .section .row button"); if(addBtn) addBtn.disabled=READONLY;
   const tb=$("#tabla-personal tbody"); tb.innerHTML="";
   (pr.personal||[]).forEach((p,idx)=>{
-    const reqVals = Object.values(p.requisitos||{}).filter(v=>v);
+    const reqVals = Object.values(p.requisitos||{}).filter(v=>v && v!=='NA');
     const guiaVals = [];
-    (p.guiasMedicas||[]).forEach(g=> Object.values(g.items||{}).forEach(v=>{ if(v) guiaVals.push(v); }));
+    (p.guiasMedicas||[]).forEach(g=> Object.values(g.items||{}).forEach(v=>{ if(v && v!=='NA') guiaVals.push(v); }));
     const total = reqVals.length + guiaVals.length;
     const done = reqVals.filter(v=>v==='S').length + guiaVals.filter(v=>v==='S').length;
     const perc = Math.round( (done/Math.max(1,total))*100 );
     const fs = (p.requisitos||{}).P_RIESGO_FS100==="S"?"S":"";
-    const apto = (p.guiasMedicas||[]).filter(g=>Object.values(g.items||{}).filter(Boolean).every(v=>v==='S')).map(g=>g.perfil.replaceAll('_',' ')).join(", ");
+    const apto = (p.guiasMedicas||[])
+      .filter(g=>{
+        const vals = Object.values(g.items||{}).filter(v=>v && v!=='NA');
+        return vals.length && vals.every(v=>v==='S');
+      })
+      .map(g=>g.perfil.replaceAll('_',' ')).join(", ");
     const tr = document.createElement("tr");
     const acciones = READONLY?"":`<button class="btn small" onclick="editarPersona(${idx})">Editar</button> <button class="btn secondary small" onclick="eliminarPersona(${idx})">Eliminar</button>`;
     tr.innerHTML = `
@@ -2861,10 +2962,13 @@ function editarPersona(idx){
     const tbody=document.createElement("tbody");
     Object.entries(items).forEach(([code,label])=>{
       const val=(p.requisitos||{})[code]||"";
+      const obs=(p.requisitosObs||{})[code]||"";
       const tr=document.createElement("tr");
-      tr.innerHTML = `<td style="width:300px">${label}<div class="note">${code}</div></td>
-      <td style="width:160px"><select class="pf-req" data-code="${code}">
-        <option value="">—</option><option value="S" ${val==="S"?"selected":""}>S</option><option value="N" ${val==="N"?"selected":""}>N</option><option value="NA" ${val==="NA"?"selected":""}>NA</option></select></td>`;
+      tr.innerHTML = `<td style="width:300px">${label}<div class=\"note\">${code}</div></td>
+      <td style=\"width:160px\"><select class=\"pf-req\" data-code=\"${code}\">
+        <option value=\"\">—</option><option value=\"S\" ${val==="S"?"selected":""}>S</option><option value=\"N\" ${val==="N"?"selected":""}>N</option><option value=\"NA\" ${val==="NA"?"selected":""}>NA</option></select>
+        <input class=\"pf-req-com\" data-code=\"${code}\" type=\"text\" placeholder=\"Comentario\" value=\"${obs}\" style=\"display:${val==="N"?"block":"none"};margin-top:4px\"/>
+      </td>`;
       tbody.appendChild(tr);
     });
     tbl.appendChild(tbody); det.appendChild(tbl); box.appendChild(det);
@@ -2893,12 +2997,25 @@ function editarPersona(idx){
     else if(e.target.id==="pf-nombre") p.nombre=e.target.value.trim();
     else if(e.target.id==="pf-cargo") p.cargo=e.target.value.trim();
     else if(e.target.id==="pf-com") p.comentarios=e.target.value.trim();
+    else if(e.target.classList.contains("pf-req-com")){
+      if(!p.requisitosObs) p.requisitosObs={};
+      p.requisitosObs[e.target.dataset.code]=e.target.value.trim();
+      autoLs025FromPersonal(e.target.dataset.code, e.target.value.trim());
+    }
     persistDB(); renderTablaPersonal(); renderDashboard();
   });
   box.addEventListener("change", e=>{
     if(e.target.classList.contains("pf-req")){
       if(!p.requisitos) p.requisitos={};
-      p.requisitos[e.target.dataset.code]=e.target.value;
+      const code=e.target.dataset.code;
+      p.requisitos[code]=e.target.value;
+      const com=box.querySelector(`input.pf-req-com[data-code="${code}"]`);
+      if(e.target.value==="N"){
+        com.style.display='block';
+        autoLs025FromPersonal(code,(p.requisitosObs||{})[code]||"");
+      }else{
+        com.style.display='none';
+      }
       updateGuiasVisibility();
       persistDB();
       renderTablaPersonal();
@@ -2983,7 +3100,7 @@ function renderTablaVehiculos(){
   const addBtn=$("#panel-vehiculos .section .row button"); if(addBtn) addBtn.disabled=READONLY;
   const tb=$("#tabla-vehiculos tbody"); tb.innerHTML="";
   (pr.vehiculos||[]).forEach((v,idx)=>{
-    const vals=Object.values(v.requisitos||{}).filter(x=>x);
+    const vals=Object.values(v.requisitos||{}).filter(x=>x && x!=='NA');
     const done=vals.filter(x=>x==="S").length;
     const perc=Math.round((done/Math.max(1,vals.length))*100);
     const tr=document.createElement("tr");
@@ -3027,12 +3144,15 @@ function editarVehiculo(idx){
   const tbl=document.createElement("table"); tbl.className="table"; const tbody=document.createElement("tbody");
   Object.entries(reqs).forEach(([code,label])=>{
     const val=(v.requisitos||{})[code]||"";
+    const obs=(v.reqComentarios||{})[code]||"";
     const tr=document.createElement("tr");
-    tr.innerHTML = `<td style="width:320px">${label}<div class="note">${code}</div></td>
-      <td style="width:160px"><select data-code="${code}">
-        <option value="">—</option><option value="S" ${val==="S"?"selected":""}>S</option>
-        <option value="N" ${val==="N"?"selected":""}>N</option>
-        <option value="NA" ${val==="NA"?"selected":""}>NA</option></select></td>`;
+    tr.innerHTML = `<td style="width:320px">${label}<div class=\"note\">${code}</div></td>
+      <td style=\"width:160px\"><select class=\"vf-req\" data-code=\"${code}\">
+        <option value=\"\">—</option><option value=\"S\" ${val==="S"?"selected":""}>S</option>
+        <option value=\"N\" ${val==="N"?"selected":""}>N</option>
+        <option value=\"NA\" ${val==="NA"?"selected":""}>NA</option></select>
+        <input class=\"vf-req-com\" data-code=\"${code}\" type=\"text\" placeholder=\"Comentario\" value=\"${obs}\" style=\"display:${val==="N"?"block":"none"};margin-top:4px\"/>
+      </td>`;
     tbody.appendChild(tr);
   });
   tbl.appendChild(tbody); det.appendChild(tbl); box.appendChild(det);
@@ -3044,12 +3164,25 @@ function editarVehiculo(idx){
     else if(e.target.id==="vf-marca") v.marca=e.target.value.trim();
     else if(e.target.id==="vf-tipo") v.tipo=e.target.value.trim();
     else if(e.target.id==="vf-com") v.comentarios=e.target.value.trim();
+    else if(e.target.classList.contains("vf-req-com")){
+      if(!v.reqComentarios) v.reqComentarios={};
+      v.reqComentarios[e.target.dataset.code]=e.target.value.trim();
+      autoLs025FromVeh(e.target.dataset.code, e.target.value.trim());
+    }
     persistDB(); renderTablaVehiculos(); renderDashboard();
   });
   box.addEventListener("change", e=>{
-    if(e.target.tagName==="SELECT" && e.target.dataset.code){
+    if(e.target.classList.contains("vf-req")){
       if(!v.requisitos) v.requisitos={};
-      v.requisitos[e.target.dataset.code] = e.target.value;
+      const code=e.target.dataset.code;
+      v.requisitos[code] = e.target.value;
+      const com=box.querySelector(`input.vf-req-com[data-code="${code}"]`);
+      if(e.target.value==="N"){
+        com.style.display='block';
+        autoLs025FromVeh(code,(v.reqComentarios||{})[code]||"");
+      }else{
+        com.style.display='none';
+      }
       persistDB();
       renderTablaVehiculos();
       renderDashboard();
@@ -3118,14 +3251,19 @@ function pdfYCorreo(clave,pid,opts={}){
       let bad=[]; Object.entries(p.requisitos||{}).forEach(([k,v])=>{ if(v==="N") bad.push(k); });
       (p.guiasMedicas||[]).forEach(g=> Object.entries(g.items||{}).forEach(([k,v])=>{ if(v==="N") bad.push(k); }));
       const fs = (p.requisitos||{}).P_RIESGO_FS100 || '';
-      const apto = (p.guiasMedicas||[]).filter(g=>Object.values(g.items||{}).filter(Boolean).every(v=>v==='S')).map(g=>g.perfil.replaceAll('_',' ')).join(", ");
+      const apto = (p.guiasMedicas||[])
+        .filter(g=>{
+          const vals = Object.values(g.items||{}).filter(v=>v && v!=='NA');
+          return vals.length && vals.every(v=>v==='S');
+        })
+        .map(g=>g.perfil.replaceAll('_',' ')).join(", ");
       return `<tr><td>${p.nombre}</td><td>${p.cargo||''}</td><td>${fs}</td><td>${apto}</td><td>${bad.join(", ")}</td></tr>`;
     }).join("") || "<tr><td colspan='5'>Sin personal</td></tr>";
     return `<table><thead><tr><th>Persona</th><th>Cargo</th><th>FS100</th><th>Apto</th><th>Observaciones (NO)</th></tr></thead><tbody>${rows}</tbody></table>`;
   };
   const tableVeh = ()=>{
     const rows = (snap.vehiculos||[]).map(v=>{
-      const vals = Object.values(v.requisitos||{}).filter(x=>x);
+      const vals = Object.values(v.requisitos||{}).filter(x=>x && x!=='NA');
       const bad = Object.entries(v.requisitos||{}).filter(([k,val])=>val==="N").map(([k])=>k).join(", ");
       const est = computeEstadoRapido_SPN(vals);
       return `<tr><td>${v.placa}</td><td>${(v.marca||'')+' '+(v.tipo||'')}</td><td>${est}</td><td>${bad}</td></tr>`;
@@ -3304,7 +3442,7 @@ function refreshSelectors(selEmpresaId, selProyectoId){
     const n=emp?.empresa?.datos?.empresa || emp?.empresa?.nombre;
     if(!n) return false;
     if(ES_RESPONSABLE && !USUARIO.admin){
-      return Object.values(emp.proyectos||{}).some(pr=> pr.proyecto?.responsables?.proyecto?.correo===USUARIO.correo);
+      return Object.values(emp.proyectos||{}).some(pr=> esResponsableEnProyecto(pr, USUARIO.correo));
     }
     return true;
   });
@@ -3313,7 +3451,7 @@ function refreshSelectors(selEmpresaId, selProyectoId){
   const proys = Object.keys(DBCACHE[clave]?.proyectos||{}).filter(pid=>{
     if(ES_RESPONSABLE && !USUARIO.admin){
       const pr=DBCACHE[clave]?.proyectos?.[pid];
-      return pr?.proyecto?.responsables?.proyecto?.correo===USUARIO.correo;
+      return esResponsableEnProyecto(pr, USUARIO.correo);
     }
     return true;
   });
