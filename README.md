@@ -17,4 +17,4 @@ La función de proxy para Gemini también recupera la clave directamente desde l
 - Se envían notificaciones iniciales a SST/MA/RSE y se verifica automáticamente cuando los tres han concluido.
 - El Web App ahora puede recibir datos mediante un formulario que se envía a un iframe oculto y responde usando `postMessage`, lo que permite utilizar el HTML desde `file://` sin errores de CORS. Mantiene además la respuesta JSON con cabeceras `Access-Control-Allow-*` por si se usa `fetch` desde un origen HTTPS.
 - La función `enviarASheet` envía el JSON como `text/plain` para evitar el preflight y captura errores de red si la URL del Web App no es accesible.
-- El Web App ahora registra `correoSST` además de `correoMA` y `correoRSE` y notifica a todos los responsables.
+- El Web App ahora registra `correoSST`, `correoMA`, `correoRSE`, `correoEmp` y `correoResp` y notifica a todos los responsables.
