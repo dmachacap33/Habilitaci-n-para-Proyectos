@@ -1959,6 +1959,29 @@ const GUIAS_LABELS = {
   GM_INF_MED:"Informe Médico", GM_OBES:"Obesidad", GM_ESPIRO:"Espirometría", GM_SANGRE:"Pruebas de sangre"
 };
 
+const MAP_PERSONAL_TO_LS025 = {
+  P_DOC_CI:"L018",
+  P_CUR_1AUX:"L019",
+  P_CUR_INC:"L020",
+  P_CUR_EPP:"L021",
+  P_CUR_ERG:"L022",
+  P_CUR_COM_PEL:"L023",
+  P_CUR_ESPEC:"L025",
+  P_VAC_FA:"L026",
+  P_VAC_DIF_TET:"L027",
+  P_VAC_INFLU:"L028"
+};
+
+const MAP_VEH_TO_LS025 = {
+  V_LISTADO:"L059",
+  V_CHECKLIST:"L060",
+  V_RUAT_CRPVA:"L061",
+  V_ITV:"L062",
+  V_SOAT:"L062",
+  V_POLIZA_RC:"L063",
+  V_SATELITAL:"L064"
+};
+
 /* ================== Utilidades ================== */
 function chipsInit(containerSel){
   $$(containerSel+" .chip input").forEach(ch=>{
@@ -2812,6 +2835,41 @@ function guardarLS025(){
   persistDB();
 }
 
+function actualizarLS025(reqId, comentario, clave, pid){
+  const pr = ensureProyecto(clave,pid);
+  if(!pr.ls025) pr.ls025 = {respuestas:[]};
+  const arr = pr.ls025.respuestas;
+  let r = arr.find(x=>x.reqId===reqId);
+  const txt = `${USUARIO.nombre}: ${comentario}`;
+  if(!r){
+    r = {reqId, valor:"N", comentario:txt, autor:USUARIO.correo||"", modificadoEn:nowIso()};
+    arr.push(r);
+  }else{
+    r.valor = "N";
+    r.comentario = r.comentario ? r.comentario+"; "+txt : txt;
+    r.autor = USUARIO.correo||"";
+    r.modificadoEn = nowIso();
+  }
+  persistDB();
+  buildLs025();
+}
+
+function autoLs025FromPersonal(code, comentario){
+  const reqId = MAP_PERSONAL_TO_LS025[code];
+  if(!reqId) return;
+  const clave=$("#per-empresaSel").value;
+  const pid=$("#per-proyectoSel").value;
+  actualizarLS025(reqId, comentario, clave, pid);
+}
+
+function autoLs025FromVeh(code, comentario){
+  const reqId = MAP_VEH_TO_LS025[code];
+  if(!reqId) return;
+  const clave=$("#veh-empresaSel").value;
+  const pid=$("#veh-proyectoSel").value;
+  actualizarLS025(reqId, comentario, clave, pid);
+}
+
 /* ================== Personal ================== */
 let editingPersonaIndex=-1;
 function proyectoActualPersonal(){
@@ -2898,10 +2956,13 @@ function editarPersona(idx){
     const tbody=document.createElement("tbody");
     Object.entries(items).forEach(([code,label])=>{
       const val=(p.requisitos||{})[code]||"";
+      const obs=(p.requisitosObs||{})[code]||"";
       const tr=document.createElement("tr");
-      tr.innerHTML = `<td style="width:300px">${label}<div class="note">${code}</div></td>
-      <td style="width:160px"><select class="pf-req" data-code="${code}">
-        <option value="">—</option><option value="S" ${val==="S"?"selected":""}>S</option><option value="N" ${val==="N"?"selected":""}>N</option><option value="NA" ${val==="NA"?"selected":""}>NA</option></select></td>`;
+      tr.innerHTML = `<td style="width:300px">${label}<div class=\"note\">${code}</div></td>
+      <td style=\"width:160px\"><select class=\"pf-req\" data-code=\"${code}\">
+        <option value=\"\">—</option><option value=\"S\" ${val==="S"?"selected":""}>S</option><option value=\"N\" ${val==="N"?"selected":""}>N</option><option value=\"NA\" ${val==="NA"?"selected":""}>NA</option></select>
+        <input class=\"pf-req-com\" data-code=\"${code}\" type=\"text\" placeholder=\"Comentario\" value=\"${obs}\" style=\"display:${val==="N"?"block":"none"};margin-top:4px\"/>
+      </td>`;
       tbody.appendChild(tr);
     });
     tbl.appendChild(tbody); det.appendChild(tbl); box.appendChild(det);
@@ -2930,12 +2991,25 @@ function editarPersona(idx){
     else if(e.target.id==="pf-nombre") p.nombre=e.target.value.trim();
     else if(e.target.id==="pf-cargo") p.cargo=e.target.value.trim();
     else if(e.target.id==="pf-com") p.comentarios=e.target.value.trim();
+    else if(e.target.classList.contains("pf-req-com")){
+      if(!p.requisitosObs) p.requisitosObs={};
+      p.requisitosObs[e.target.dataset.code]=e.target.value.trim();
+      autoLs025FromPersonal(e.target.dataset.code, e.target.value.trim());
+    }
     persistDB(); renderTablaPersonal(); renderDashboard();
   });
   box.addEventListener("change", e=>{
     if(e.target.classList.contains("pf-req")){
       if(!p.requisitos) p.requisitos={};
-      p.requisitos[e.target.dataset.code]=e.target.value;
+      const code=e.target.dataset.code;
+      p.requisitos[code]=e.target.value;
+      const com=box.querySelector(`input.pf-req-com[data-code="${code}"]`);
+      if(e.target.value==="N"){
+        com.style.display='block';
+        autoLs025FromPersonal(code,(p.requisitosObs||{})[code]||"");
+      }else{
+        com.style.display='none';
+      }
       updateGuiasVisibility();
       persistDB();
       renderTablaPersonal();
@@ -3064,12 +3138,15 @@ function editarVehiculo(idx){
   const tbl=document.createElement("table"); tbl.className="table"; const tbody=document.createElement("tbody");
   Object.entries(reqs).forEach(([code,label])=>{
     const val=(v.requisitos||{})[code]||"";
+    const obs=(v.reqComentarios||{})[code]||"";
     const tr=document.createElement("tr");
-    tr.innerHTML = `<td style="width:320px">${label}<div class="note">${code}</div></td>
-      <td style="width:160px"><select data-code="${code}">
-        <option value="">—</option><option value="S" ${val==="S"?"selected":""}>S</option>
-        <option value="N" ${val==="N"?"selected":""}>N</option>
-        <option value="NA" ${val==="NA"?"selected":""}>NA</option></select></td>`;
+    tr.innerHTML = `<td style="width:320px">${label}<div class=\"note\">${code}</div></td>
+      <td style=\"width:160px\"><select class=\"vf-req\" data-code=\"${code}\">
+        <option value=\"\">—</option><option value=\"S\" ${val==="S"?"selected":""}>S</option>
+        <option value=\"N\" ${val==="N"?"selected":""}>N</option>
+        <option value=\"NA\" ${val==="NA"?"selected":""}>NA</option></select>
+        <input class=\"vf-req-com\" data-code=\"${code}\" type=\"text\" placeholder=\"Comentario\" value=\"${obs}\" style=\"display:${val==="N"?"block":"none"};margin-top:4px\"/>
+      </td>`;
     tbody.appendChild(tr);
   });
   tbl.appendChild(tbody); det.appendChild(tbl); box.appendChild(det);
@@ -3081,12 +3158,25 @@ function editarVehiculo(idx){
     else if(e.target.id==="vf-marca") v.marca=e.target.value.trim();
     else if(e.target.id==="vf-tipo") v.tipo=e.target.value.trim();
     else if(e.target.id==="vf-com") v.comentarios=e.target.value.trim();
+    else if(e.target.classList.contains("vf-req-com")){
+      if(!v.reqComentarios) v.reqComentarios={};
+      v.reqComentarios[e.target.dataset.code]=e.target.value.trim();
+      autoLs025FromVeh(e.target.dataset.code, e.target.value.trim());
+    }
     persistDB(); renderTablaVehiculos(); renderDashboard();
   });
   box.addEventListener("change", e=>{
-    if(e.target.tagName==="SELECT" && e.target.dataset.code){
+    if(e.target.classList.contains("vf-req")){
       if(!v.requisitos) v.requisitos={};
-      v.requisitos[e.target.dataset.code] = e.target.value;
+      const code=e.target.dataset.code;
+      v.requisitos[code] = e.target.value;
+      const com=box.querySelector(`input.vf-req-com[data-code="${code}"]`);
+      if(e.target.value==="N"){
+        com.style.display='block';
+        autoLs025FromVeh(code,(v.reqComentarios||{})[code]||"");
+      }else{
+        com.style.display='none';
+      }
       persistDB();
       renderTablaVehiculos();
       renderDashboard();
