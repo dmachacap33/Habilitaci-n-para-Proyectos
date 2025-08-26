@@ -2836,7 +2836,7 @@ function guardarLS025(){
   persistDB();
 }
 
-function actualizarLS025(reqId, comentario, clave, pid){
+function actualizarLS025(reqId, valor, comentario, clave, pid){
   const pr = ensureProyecto(clave,pid);
   if(!pr.ls025) pr.ls025 = {respuestas:[]};
   const arr = pr.ls025.respuestas;
@@ -2846,32 +2846,66 @@ function actualizarLS025(reqId, comentario, clave, pid){
   }
 
   const txt = comentario.trim();
-  // store comment without automatically prefixing reviewer name
-  arr.push({
-    reqId,
-    valor:"N",
-    comentario:txt,
-    autor:"",
-    modificadoEn:nowIso()
-  });
-  persistDB();
-  buildLs025();
+  if(valor==="N" || valor==="S"){
+    arr.push({
+      reqId,
+      valor,
+      comentario:txt,
+      autor:"",
+      modificadoEn:nowIso()
+    });
+  }
 }
 
-function autoLs025FromPersonal(code, comentario){
+function autoLs025FromPersonal(code){
   const reqId = MAP_PERSONAL_TO_LS025[code];
   if(!reqId) return;
   const clave=$("#per-empresaSel").value;
   const pid=$("#per-proyectoSel").value;
-  actualizarLS025(reqId, comentario, clave, pid);
+  const pr = proyectoActualPersonal();
+  const personas = pr.personal || [];
+  let allS = personas.length>0;
+  let anyN = false;
+  const comentarios=[];
+  personas.forEach(p=>{
+    const val = (p.requisitos||{})[code] || "";
+    const obs = (p.requisitosObs||{})[code] || "";
+    if(val==="N"){
+      anyN = true;
+      const com = obs ? `${p.nombre}: ${obs}` : `${p.nombre||""}`;
+      comentarios.push(com.trim());
+    }
+    if(val!=="S") allS=false;
+  });
+
+  if(anyN){
+    actualizarLS025(reqId, "N", comentarios.join("; "), clave, pid);
+  }else if(allS){
+    actualizarLS025(reqId, "S", "", clave, pid);
+  }else{
+    actualizarLS025(reqId, "", "", clave, pid);
+  }
 }
 
-function autoLs025FromVeh(code, comentario){
+function autoLs025FromVeh(code){
   const reqId = MAP_VEH_TO_LS025[code];
   if(!reqId) return;
   const clave=$("#veh-empresaSel").value;
   const pid=$("#veh-proyectoSel").value;
-  actualizarLS025(reqId, comentario, clave, pid);
+  const pr = proyectoActualVeh();
+  const v = pr.vehiculos[editingVehIndex] || {};
+  const val = (v.requisitos||{})[code] || "";
+  const obs = (v.reqComentarios||{})[code] || "";
+  const comentario = obs ? `${v.vehiculoId}: ${obs}` : `${v.vehiculoId||""}`;
+  actualizarLS025(reqId, val, comentario, clave, pid);
+}
+
+function syncLs025FromPersona(){
+  Object.keys(MAP_PERSONAL_TO_LS025).forEach(code=>autoLs025FromPersonal(code));
+}
+
+function syncLs025FromVehiculo(){
+  Object.keys(MAP_VEH_TO_LS025).forEach(code=>autoLs025FromVeh(code));
 }
 
 /* ================== Personal ================== */
@@ -2999,18 +3033,17 @@ function editarPersona(idx){
     if(e.target.classList.contains("pf-req-com")){
       if(!p.requisitosObs) p.requisitosObs={};
       p.requisitosObs[e.target.dataset.code]=e.target.value.trim();
-      persistDB();
       return;
     }
     if(e.target.id==="pf-id") p.personaId=e.target.value.trim();
     else if(e.target.id==="pf-nombre") p.nombre=e.target.value.trim();
     else if(e.target.id==="pf-cargo") p.cargo=e.target.value.trim();
     else if(e.target.id==="pf-com") p.comentarios=e.target.value.trim();
-    persistDB(); renderTablaPersonal(); renderDashboard();
+    renderTablaPersonal(); renderDashboard();
   });
   box.addEventListener("change", e=>{
     if(e.target.classList.contains("pf-req-com")){
-      autoLs025FromPersonal(e.target.dataset.code, e.target.value.trim());
+      return;
     }else if(e.target.classList.contains("pf-req")){
       if(!p.requisitos) p.requisitos={};
       const code=e.target.dataset.code;
@@ -3018,12 +3051,10 @@ function editarPersona(idx){
       const com=box.querySelector(`input.pf-req-com[data-code="${code}"]`);
       if(e.target.value==="N"){
         com.style.display='block';
-        autoLs025FromPersonal(code,(p.requisitosObs||{})[code]||"");
       }else{
         com.style.display='none';
       }
       updateGuiasVisibility();
-      persistDB();
       renderTablaPersonal();
       renderDashboard();
     }
@@ -3043,7 +3074,7 @@ function agregarPerfilGuia(){
   if(p.guiasMedicas.find(g=>g.perfil===perfil)){ alert("Ese perfil ya existe"); return; }
   const items = Object.fromEntries(GUIAS_PERFILES[perfil].map(k=>[k,""]));
   p.guiasMedicas.push({perfil, items});
-  persistDB(); renderGuiasPersonales(); renderTablaPersonal(); renderDashboard();
+  renderGuiasPersonales(); renderTablaPersonal(); renderDashboard();
 }
 function renderGuiasPersonales(){
   const pr = proyectoActualPersonal(); const p = pr.personal[editingPersonaIndex];
@@ -3068,14 +3099,38 @@ function renderGuiasPersonales(){
     if(e.target.tagName==="SELECT" && e.target.dataset.gix!==undefined){
       const gix=+e.target.dataset.gix, code=e.target.dataset.code, v=e.target.value;
       const pr = proyectoActualPersonal(); pr.personal[editingPersonaIndex].guiasMedicas[gix].items[code]=v;
-      persistDB(); renderTablaPersonal(); renderDashboard();
+      renderTablaPersonal(); renderDashboard();
     }
   });
 }
 function borrarGuia(idx){
-  const pr = proyectoActualPersonal(); pr.personal[editingPersonaIndex].guiasMedicas.splice(idx,1); persistDB(); renderGuiasPersonales(); renderTablaPersonal(); renderDashboard();
+  const pr = proyectoActualPersonal(); pr.personal[editingPersonaIndex].guiasMedicas.splice(idx,1);
+  renderGuiasPersonales(); renderTablaPersonal(); renderDashboard();
 }
-function cerrarModal(id){ $("#"+id).style.display="none"; }
+function cerrarModal(id){
+  $("#"+id).style.display="none";
+  if(id==='modal-persona'){
+    syncLs025FromPersona();
+    const clave=$("#per-empresaSel").value;
+    const pid=$("#per-proyectoSel").value;
+    logProyecto(clave,pid);
+    persistDB();
+    editingPersonaIndex=-1;
+    renderTablaPersonal();
+    renderDashboard();
+    buildLs025();
+  }else if(id==='modal-vehiculo'){
+    syncLs025FromVehiculo();
+    const clave=$("#veh-empresaSel").value;
+    const pid=$("#veh-proyectoSel").value;
+    logProyecto(clave,pid);
+    persistDB();
+    editingVehIndex=-1;
+    renderTablaVehiculos();
+    renderDashboard();
+    buildLs025();
+  }
+}
 
 /* ================== Vehículos ================== */
 let editingVehIndex=-1;
@@ -3168,7 +3223,6 @@ function editarVehiculo(idx){
     if(e.target.classList.contains("vf-req-com")){
       if(!v.reqComentarios) v.reqComentarios={};
       v.reqComentarios[e.target.dataset.code]=e.target.value.trim();
-      persistDB();
       return;
     }
     if(e.target.id==="vf-id") v.vehiculoId=e.target.value.trim();
@@ -3176,11 +3230,11 @@ function editarVehiculo(idx){
     else if(e.target.id==="vf-marca") v.marca=e.target.value.trim();
     else if(e.target.id==="vf-tipo") v.tipo=e.target.value.trim();
     else if(e.target.id==="vf-com") v.comentarios=e.target.value.trim();
-    persistDB(); renderTablaVehiculos(); renderDashboard();
+    renderTablaVehiculos(); renderDashboard();
   });
   box.addEventListener("change", e=>{
     if(e.target.classList.contains("vf-req-com")){
-      autoLs025FromVeh(e.target.dataset.code, e.target.value.trim());
+      return;
     }else if(e.target.classList.contains("vf-req")){
       if(!v.requisitos) v.requisitos={};
       const code=e.target.dataset.code;
@@ -3188,11 +3242,9 @@ function editarVehiculo(idx){
       const com=box.querySelector(`input.vf-req-com[data-code="${code}"]`);
       if(e.target.value==="N"){
         com.style.display='block';
-        autoLs025FromVeh(code,(v.reqComentarios||{})[code]||"");
       }else{
         com.style.display='none';
       }
-      persistDB();
       renderTablaVehiculos();
       renderDashboard();
     }
