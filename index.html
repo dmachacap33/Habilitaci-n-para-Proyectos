@@ -1560,6 +1560,7 @@ let USERS = JSON.parse(localStorage.getItem("usuariosApp")||"{}") || {};
 let USUARIO = JSON.parse(localStorage.getItem("usuarioActual") || sessionStorage.getItem("usuarioActual") || "null") || {nombre:"", correo:"", codigo:"", admin:false};
 let READONLY = false;
 let ES_RESPONSABLE = false;
+let USER_ROLES = new Set();
 let ls025FilteredIds = null;
 let conversation = JSON.parse(localStorage.getItem('aiConversation') || 'null');
 let HISTORIAL = {};
@@ -1682,7 +1683,7 @@ function refreshEmpresaList(){
     const n=emp?.empresa?.datos?.empresa || emp?.empresa?.nombre;
     if(!n) return false;
     if(ES_RESPONSABLE && !USUARIO.admin){
-      return Object.values(emp.proyectos||{}).some(pr=> pr.proyecto?.responsables?.proyecto?.correo===USUARIO.correo);
+      return Object.values(emp.proyectos||{}).some(pr=> esResponsableEnProyecto(pr, USUARIO.correo));
     }
     return true;
   });
@@ -1698,27 +1699,59 @@ function toggleAdminUI(isAdmin){
 }
 
 function toggleResponsableUI(isResp){
-  const respTab=document.querySelector('[data-tab="resp"]');
   if(isResp){
+    let allowed=new Set(['cards','ypfb','resp']);
     READONLY=true;
-    if(respTab) respTab.style.display="flex";
+    if(USER_ROLES.has('SST')){
+      ['empresa','ls025','personal','vehiculos','resumen'].forEach(t=>allowed.add(t));
+      READONLY=false;
+    }
+    if(USER_ROLES.has('MA') || USER_ROLES.has('RSE')){
+      ['ls025','resumen'].forEach(t=>allowed.add(t));
+      READONLY=false;
+    }
     document.querySelectorAll('.sidebar .tab').forEach(t=>{
-      const allowed=['cards','resp'];
-      if(!allowed.includes(t.dataset.tab)) t.style.display='none';
+      t.style.display = allowed.has(t.dataset.tab) ? 'flex' : 'none';
     });
     switchTab('cards');
   }else{
-    if(respTab) respTab.style.display='none';
+    READONLY=false;
     document.querySelectorAll('.sidebar .tab').forEach(t=>{t.style.display='';});
   }
 }
 
+function esResponsableEnProyecto(pr, correo){
+  const resp = pr?.proyecto?.responsables || {};
+  return resp.proyecto?.correo===correo || resp.sst?.correo===correo || resp.ma?.correo===correo || resp.rse?.correo===correo;
+}
+
+function tieneAsignacionResponsable(correo){
+  if(!correo) return false;
+  return Object.values(DBCACHE).some(emp=>
+    Object.values(emp.proyectos||{}).some(pr=> esResponsableEnProyecto(pr, correo))
+  );
+}
+
+function rolesUsuario(correo){
+  const roles = new Set();
+  if(!correo) return roles;
+  Object.values(DBCACHE).forEach(emp=>{
+    Object.values(emp.proyectos||{}).forEach(pr=>{
+      const resp = pr.proyecto?.responsables || {};
+      if(resp.sst?.correo===correo) roles.add('SST');
+      if(resp.ma?.correo===correo) roles.add('MA');
+      if(resp.rse?.correo===correo) roles.add('RSE');
+    });
+  });
+  return roles;
+}
+
 function checkResponsableRole(){
   ES_RESPONSABLE=false;
+  USER_ROLES = new Set();
   if(!USUARIO || !USUARIO.correo) return;
-  ES_RESPONSABLE = Object.values(DBCACHE).some(emp=>
-    Object.values(emp.proyectos||{}).some(pr=> pr.proyecto?.responsables?.proyecto?.correo===USUARIO.correo)
-  );
+  ES_RESPONSABLE = tieneAsignacionResponsable(USUARIO.correo);
+  if(ES_RESPONSABLE) USER_ROLES = rolesUsuario(USUARIO.correo);
   if(!USUARIO.admin) toggleResponsableUI(ES_RESPONSABLE);
 }
 
@@ -1739,6 +1772,10 @@ function confirmLogin(){
     if(pass1!==pass2){alert("Las contraseñas no coinciden");return;}
     u={codigo,nombre,correo,pass:pass1,fecha:new Date().toISOString(), ultimoLogin:new Date().toISOString()};
     USERS[codigo]=u;
+  }
+  if(correo!=="david.machaca@ypfbtransporte.com.bo" && !tieneAsignacionResponsable(correo)){
+    alert("No tiene responsabilidades asignadas en ningún proyecto.");
+    return;
   }
   localStorage.setItem("usuariosApp",JSON.stringify(USERS));
   if(database){
@@ -2205,7 +2242,7 @@ function renderDashboard(){
     const nombre = emp?.empresa?.datos?.empresa || emp?.empresa?.nombre;
     if(!nombre) return false;
     if(ES_RESPONSABLE && !USUARIO.admin){
-      return Object.values(emp.proyectos||{}).some(pr=> pr.proyecto?.responsables?.proyecto?.correo===USUARIO.correo);
+      return Object.values(emp.proyectos||{}).some(pr=> esResponsableEnProyecto(pr, USUARIO.correo));
     }
     return true;
   });
@@ -2219,7 +2256,7 @@ function renderDashboard(){
     const proyectos = Object.keys(emp.proyectos||{}).filter(pid=>{
       if(ES_RESPONSABLE && !USUARIO.admin){
         const pr=emp.proyectos[pid];
-        return pr.proyecto?.responsables?.proyecto?.correo===USUARIO.correo;
+        return esResponsableEnProyecto(pr, USUARIO.correo);
       }
       return true;
     }).map(pid=>{
@@ -2324,7 +2361,7 @@ function renderResponsable(){
   Object.entries(DBCACHE).forEach(([clave,emp])=>{
     const nombreEmp = emp.empresa?.datos?.empresa || emp.empresa?.nombre || clave;
     Object.entries(emp.proyectos||{}).forEach(([pid,pr])=>{
-      if(pr.proyecto?.responsables?.proyecto?.correo === correo){
+      if(esResponsableEnProyecto(pr, correo)){
         const est = estadoProyecto(pr);
         const logs = (pr.historial||[]).map(h=>`<div class="hist-item">${h.fecha||""} — ${h.responsable||""}: ${h.accion||""}</div>`).join("") || "<div class='note'>Sin registros</div>";
         const card = `<div class="cardx resp-card"><h4>${nombreEmp} / ${pid}</h4><div class="status ${cls(est)}">${est}</div><details><summary>Ver seguimiento</summary><div class="log">${logs}</div></details></div>`;
@@ -3304,7 +3341,7 @@ function refreshSelectors(selEmpresaId, selProyectoId){
     const n=emp?.empresa?.datos?.empresa || emp?.empresa?.nombre;
     if(!n) return false;
     if(ES_RESPONSABLE && !USUARIO.admin){
-      return Object.values(emp.proyectos||{}).some(pr=> pr.proyecto?.responsables?.proyecto?.correo===USUARIO.correo);
+      return Object.values(emp.proyectos||{}).some(pr=> esResponsableEnProyecto(pr, USUARIO.correo));
     }
     return true;
   });
@@ -3313,7 +3350,7 @@ function refreshSelectors(selEmpresaId, selProyectoId){
   const proys = Object.keys(DBCACHE[clave]?.proyectos||{}).filter(pid=>{
     if(ES_RESPONSABLE && !USUARIO.admin){
       const pr=DBCACHE[clave]?.proyectos?.[pid];
-      return pr?.proyecto?.responsables?.proyecto?.correo===USUARIO.correo;
+      return esResponsableEnProyecto(pr, USUARIO.correo);
     }
     return true;
   });
