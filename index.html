@@ -2999,7 +2999,6 @@ function editarPersona(idx){
     if(e.target.classList.contains("pf-req-com")){
       if(!p.requisitosObs) p.requisitosObs={};
       p.requisitosObs[e.target.dataset.code]=e.target.value.trim();
-      persistDB();
       return;
     }
     if(e.target.id==="pf-id") p.personaId=e.target.value.trim();
@@ -3010,7 +3009,10 @@ function editarPersona(idx){
   });
   box.addEventListener("change", e=>{
     if(e.target.classList.contains("pf-req-com")){
+      if(!p.requisitosObs) p.requisitosObs={};
+      p.requisitosObs[e.target.dataset.code]=e.target.value.trim();
       autoLs025FromPersonal(e.target.dataset.code, e.target.value.trim(), p.nombre, "N");
+      persistDB();
     }else if(e.target.classList.contains("pf-req")){
       if(!p.requisitos) p.requisitos={};
       const code=e.target.dataset.code;
@@ -3172,7 +3174,6 @@ function editarVehiculo(idx){
     if(e.target.classList.contains("vf-req-com")){
       if(!v.reqComentarios) v.reqComentarios={};
       v.reqComentarios[e.target.dataset.code]=e.target.value.trim();
-      persistDB();
       return;
     }
     if(e.target.id==="vf-id") v.vehiculoId=e.target.value.trim();
@@ -3184,7 +3185,10 @@ function editarVehiculo(idx){
   });
   box.addEventListener("change", e=>{
     if(e.target.classList.contains("vf-req-com")){
+      if(!v.reqComentarios) v.reqComentarios={};
+      v.reqComentarios[e.target.dataset.code]=e.target.value.trim();
       autoLs025FromVeh(e.target.dataset.code, e.target.value.trim(), v.placa, "N");
+      persistDB();
     }else if(e.target.classList.contains("vf-req")){
       if(!v.requisitos) v.requisitos={};
       const code=e.target.dataset.code;
