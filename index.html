@@ -2847,7 +2847,7 @@ function actualizarLS025(reqId, comentario, clave, pid){
     arr.push(r);
   }else{
     r.valor = "N";
-    r.comentario = r.comentario ? r.comentario+"; "+txt : txt;
+    r.comentario = txt;
     r.autor = USUARIO.correo||"";
     r.modificadoEn = nowIso();
   }
@@ -3000,7 +3000,6 @@ function editarPersona(idx){
     else if(e.target.classList.contains("pf-req-com")){
       if(!p.requisitosObs) p.requisitosObs={};
       p.requisitosObs[e.target.dataset.code]=e.target.value.trim();
-      autoLs025FromPersonal(e.target.dataset.code, e.target.value.trim());
     }
     persistDB(); renderTablaPersonal(); renderDashboard();
   });
@@ -3017,6 +3016,11 @@ function editarPersona(idx){
         com.style.display='none';
       }
       updateGuiasVisibility();
+      persistDB();
+      renderTablaPersonal();
+      renderDashboard();
+    }else if(e.target.classList.contains("pf-req-com")){
+      autoLs025FromPersonal(e.target.dataset.code, e.target.value.trim());
       persistDB();
       renderTablaPersonal();
       renderDashboard();
@@ -3167,7 +3171,6 @@ function editarVehiculo(idx){
     else if(e.target.classList.contains("vf-req-com")){
       if(!v.reqComentarios) v.reqComentarios={};
       v.reqComentarios[e.target.dataset.code]=e.target.value.trim();
-      autoLs025FromVeh(e.target.dataset.code, e.target.value.trim());
     }
     persistDB(); renderTablaVehiculos(); renderDashboard();
   });
@@ -3183,6 +3186,11 @@ function editarVehiculo(idx){
       }else{
         com.style.display='none';
       }
+      persistDB();
+      renderTablaVehiculos();
+      renderDashboard();
+    }else if(e.target.classList.contains("vf-req-com")){
+      autoLs025FromVeh(e.target.dataset.code, e.target.value.trim());
       persistDB();
       renderTablaVehiculos();
       renderDashboard();
