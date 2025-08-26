@@ -1565,18 +1565,26 @@ let ls025FilteredIds = null;
 let conversation = JSON.parse(localStorage.getItem('aiConversation') || 'null');
 let HISTORIAL = {};
 let currentProyecto = null;
-if (!conversation) {
-  conversation = [{
+
+function initialConversation(){
+  return [{
     role: 'model',
     parts: [{
       text: 'Por favor, cuéntame TODO sobre el proyecto: de qué se trata, dónde se hará (estación/DDV/terminal, ciudad/país), fechas y duración, actividades principales (p. ej., conducción, trabajos en caliente, izaje, alturas, espacio confinado, electricidad, arenado, hot tap, excavación), si habrá campamentos y rutas, cuántas personas y roles, si hay conductores u operadores de equipo pesado, si manipulan sustancias químicas o alimentos, si trabajarán fuera de Bolivia o con personal extranjero, vehículos/equipos previstos y cualquier tema ambiental (licencias, desmonte, áridos, ruido/emisiones).'
     }]
   }];
 }
+if (!conversation) {
+  conversation = initialConversation();
+}
 function saveConversation(){
   const max = 50;
   const toSave = conversation.slice(-max);
   localStorage.setItem('aiConversation', JSON.stringify(toSave));
+}
+function resetConversation(){
+  conversation = initialConversation();
+  saveConversation();
 }
 function persistDB(){
   if (database) {
@@ -2836,7 +2844,7 @@ function guardarLS025(){
   persistDB();
 }
 
-function actualizarLS025(reqId, comentario, clave, pid){
+function actualizarLS025(reqId, valor, comentario, clave, pid){
   const pr = ensureProyecto(clave,pid);
   if(!pr.ls025) pr.ls025 = {respuestas:[]};
   const arr = pr.ls025.respuestas;
@@ -2846,32 +2854,66 @@ function actualizarLS025(reqId, comentario, clave, pid){
   }
 
   const txt = comentario.trim();
-  // store comment without automatically prefixing reviewer name
-  arr.push({
-    reqId,
-    valor:"N",
-    comentario:txt,
-    autor:"",
-    modificadoEn:nowIso()
-  });
-  persistDB();
-  buildLs025();
+  if(valor==="N" || valor==="S"){
+    arr.push({
+      reqId,
+      valor,
+      comentario:txt,
+      autor:"",
+      modificadoEn:nowIso()
+    });
+  }
 }
 
-function autoLs025FromPersonal(code, comentario){
+function autoLs025FromPersonal(code){
   const reqId = MAP_PERSONAL_TO_LS025[code];
   if(!reqId) return;
   const clave=$("#per-empresaSel").value;
   const pid=$("#per-proyectoSel").value;
-  actualizarLS025(reqId, comentario, clave, pid);
+  const pr = proyectoActualPersonal();
+  const personas = pr.personal || [];
+  let allS = personas.length>0;
+  let anyN = false;
+  const comentarios=[];
+  personas.forEach(p=>{
+    const val = (p.requisitos||{})[code] || "";
+    const obs = (p.requisitosObs||{})[code] || "";
+    if(val==="N"){
+      anyN = true;
+      const com = obs ? `${p.nombre}: ${obs}` : `${p.nombre||""}`;
+      comentarios.push(com.trim());
+    }
+    if(val!=="S") allS=false;
+  });
+
+  if(anyN){
+    actualizarLS025(reqId, "N", comentarios.join("; "), clave, pid);
+  }else if(allS){
+    actualizarLS025(reqId, "S", "", clave, pid);
+  }else{
+    actualizarLS025(reqId, "", "", clave, pid);
+  }
 }
 
-function autoLs025FromVeh(code, comentario){
+function autoLs025FromVeh(code){
   const reqId = MAP_VEH_TO_LS025[code];
   if(!reqId) return;
   const clave=$("#veh-empresaSel").value;
   const pid=$("#veh-proyectoSel").value;
-  actualizarLS025(reqId, comentario, clave, pid);
+  const pr = proyectoActualVeh();
+  const v = pr.vehiculos[editingVehIndex] || {};
+  const val = (v.requisitos||{})[code] || "";
+  const obs = (v.reqComentarios||{})[code] || "";
+  const comentario = obs ? `${v.vehiculoId}: ${obs}` : `${v.vehiculoId||""}`;
+  actualizarLS025(reqId, val, comentario, clave, pid);
+}
+
+function syncLs025FromPersona(){
+  Object.keys(MAP_PERSONAL_TO_LS025).forEach(code=>autoLs025FromPersonal(code));
+}
+
+function syncLs025FromVehiculo(){
+  Object.keys(MAP_VEH_TO_LS025).forEach(code=>autoLs025FromVeh(code));
 }
 
 /* ================== Personal ================== */
@@ -2999,18 +3041,17 @@ function editarPersona(idx){
     if(e.target.classList.contains("pf-req-com")){
       if(!p.requisitosObs) p.requisitosObs={};
       p.requisitosObs[e.target.dataset.code]=e.target.value.trim();
-      persistDB();
       return;
     }
     if(e.target.id==="pf-id") p.personaId=e.target.value.trim();
     else if(e.target.id==="pf-nombre") p.nombre=e.target.value.trim();
     else if(e.target.id==="pf-cargo") p.cargo=e.target.value.trim();
     else if(e.target.id==="pf-com") p.comentarios=e.target.value.trim();
-    persistDB(); renderTablaPersonal(); renderDashboard();
+    renderTablaPersonal(); renderDashboard();
   });
   box.addEventListener("change", e=>{
     if(e.target.classList.contains("pf-req-com")){
-      autoLs025FromPersonal(e.target.dataset.code, e.target.value.trim());
+      return;
     }else if(e.target.classList.contains("pf-req")){
       if(!p.requisitos) p.requisitos={};
       const code=e.target.dataset.code;
@@ -3018,12 +3059,10 @@ function editarPersona(idx){
       const com=box.querySelector(`input.pf-req-com[data-code="${code}"]`);
       if(e.target.value==="N"){
         com.style.display='block';
-        autoLs025FromPersonal(code,(p.requisitosObs||{})[code]||"");
       }else{
         com.style.display='none';
       }
       updateGuiasVisibility();
-      persistDB();
       renderTablaPersonal();
       renderDashboard();
     }
@@ -3043,7 +3082,7 @@ function agregarPerfilGuia(){
   if(p.guiasMedicas.find(g=>g.perfil===perfil)){ alert("Ese perfil ya existe"); return; }
   const items = Object.fromEntries(GUIAS_PERFILES[perfil].map(k=>[k,""]));
   p.guiasMedicas.push({perfil, items});
-  persistDB(); renderGuiasPersonales(); renderTablaPersonal(); renderDashboard();
+  renderGuiasPersonales(); renderTablaPersonal(); renderDashboard();
 }
 function renderGuiasPersonales(){
   const pr = proyectoActualPersonal(); const p = pr.personal[editingPersonaIndex];
@@ -3068,14 +3107,38 @@ function renderGuiasPersonales(){
     if(e.target.tagName==="SELECT" && e.target.dataset.gix!==undefined){
       const gix=+e.target.dataset.gix, code=e.target.dataset.code, v=e.target.value;
       const pr = proyectoActualPersonal(); pr.personal[editingPersonaIndex].guiasMedicas[gix].items[code]=v;
-      persistDB(); renderTablaPersonal(); renderDashboard();
+      renderTablaPersonal(); renderDashboard();
     }
   });
 }
 function borrarGuia(idx){
-  const pr = proyectoActualPersonal(); pr.personal[editingPersonaIndex].guiasMedicas.splice(idx,1); persistDB(); renderGuiasPersonales(); renderTablaPersonal(); renderDashboard();
+  const pr = proyectoActualPersonal(); pr.personal[editingPersonaIndex].guiasMedicas.splice(idx,1);
+  renderGuiasPersonales(); renderTablaPersonal(); renderDashboard();
 }
-function cerrarModal(id){ $("#"+id).style.display="none"; }
+function cerrarModal(id){
+  $("#"+id).style.display="none";
+  if(id==='modal-persona'){
+    syncLs025FromPersona();
+    const clave=$("#per-empresaSel").value;
+    const pid=$("#per-proyectoSel").value;
+    logProyecto(clave,pid);
+    persistDB();
+    editingPersonaIndex=-1;
+    renderTablaPersonal();
+    renderDashboard();
+    buildLs025();
+  }else if(id==='modal-vehiculo'){
+    syncLs025FromVehiculo();
+    const clave=$("#veh-empresaSel").value;
+    const pid=$("#veh-proyectoSel").value;
+    logProyecto(clave,pid);
+    persistDB();
+    editingVehIndex=-1;
+    renderTablaVehiculos();
+    renderDashboard();
+    buildLs025();
+  }
+}
 
 /* ================== Vehículos ================== */
 let editingVehIndex=-1;
@@ -3168,7 +3231,6 @@ function editarVehiculo(idx){
     if(e.target.classList.contains("vf-req-com")){
       if(!v.reqComentarios) v.reqComentarios={};
       v.reqComentarios[e.target.dataset.code]=e.target.value.trim();
-      persistDB();
       return;
     }
     if(e.target.id==="vf-id") v.vehiculoId=e.target.value.trim();
@@ -3176,11 +3238,11 @@ function editarVehiculo(idx){
     else if(e.target.id==="vf-marca") v.marca=e.target.value.trim();
     else if(e.target.id==="vf-tipo") v.tipo=e.target.value.trim();
     else if(e.target.id==="vf-com") v.comentarios=e.target.value.trim();
-    persistDB(); renderTablaVehiculos(); renderDashboard();
+    renderTablaVehiculos(); renderDashboard();
   });
   box.addEventListener("change", e=>{
     if(e.target.classList.contains("vf-req-com")){
-      autoLs025FromVeh(e.target.dataset.code, e.target.value.trim());
+      return;
     }else if(e.target.classList.contains("vf-req")){
       if(!v.requisitos) v.requisitos={};
       const code=e.target.dataset.code;
@@ -3188,11 +3250,9 @@ function editarVehiculo(idx){
       const com=box.querySelector(`input.vf-req-com[data-code="${code}"]`);
       if(e.target.value==="N"){
         com.style.display='block';
-        autoLs025FromVeh(code,(v.reqComentarios||{})[code]||"");
       }else{
         com.style.display='none';
       }
-      persistDB();
       renderTablaVehiculos();
       renderDashboard();
     }
@@ -3619,6 +3679,9 @@ async function handleUserMessage() {
         HISTORIAL[k].push(entry);
       }
       setTimeout(() => chatContainer.classList.remove('visible'), 500);
+      resetConversation();
+      currentProyecto = null;
+      ls025FilteredIds = null;
     }
   } catch (error) {
     console.error("Error al contactar a la IA:", error);
@@ -3656,7 +3719,7 @@ async function askAI() {
     historialPrompt = '\nHistorial previo para proyectos similares (' + currentProyecto + '):\n' +
       historial.map(h => `- Alcance: ${h.alcance}; TipoContrato: ${h.tipoContrato}; Personal: ${h.personal}; LS025: ${(h.ids||[]).join(',')}`).join('\n');
   }
-  const systemInstruction = `Eres Asistente de Habilitación LS.025. Abre siempre con una sola pregunta amplia para que el usuario describa todo el proyecto: tipo, ubicación, fechas, actividades, campamentos o rutas, cantidad y roles de personas, conductores u operadores, manejo de sustancias o alimentos, trabajo fuera de Bolivia o con personal extranjero, vehículos/equipos y temas ambientales. Detecta automáticamente los requisitos aplicables del catálogo (1-95) y devuélvelos como "Requisitos detectados sí o sí" con breve justificación. Luego pregunta solo lo faltante agrupando en este orden: Generales, Personal (Vacunas/Cursos), Supervisor SSMS & Salud, Vehículos/Equipos, Medio ambiente, Social/Comunidad, Territorio/Extranjeros, Alimentos/Plaguicidas. Tras cada respuesta actualiza la lista y marca pendientes. Al finalizar entrega un resumen ejecutivo y checklist numerada en el campo "mensaje" y responde solo con un JSON puro {"mensaje":"texto","ids":["L001"],"cerrar":false,"proyecto":"","alcance":"","tipoContrato":"","personal":""}. Usa ids=null mientras falte información, establece cerrar=true solo cuando el usuario confirme que terminó y evita bloques de código. Catálogo LS.025:\n${ls025Context}${historialPrompt}`;
+  const systemInstruction = `Eres Asistente de Habilitación LS.025. Interactúa de forma natural y amable. Comienza siempre con una sola pregunta amplia para que el usuario describa el proyecto: tipo, ubicación, fechas, duración, actividades principales (conducción, trabajos en caliente, izaje, alturas, espacio confinado, electricidad, arenado, hot tap, excavación), campamentos o rutas, cantidad y roles de personas, conductores u operadores de equipo pesado, manipulación de sustancias químicas o alimentos, trabajo fuera de Bolivia o con personal extranjero, vehículos/equipos y temas ambientales. Detecta automáticamente los requisitos aplicables del catálogo (1-95) y devuélvelos como "Requisitos detectados sí o sí" con breve justificación. Siempre incluye responsables de SST, MA y RSE aunque el usuario no los mencione. Pregunta solo lo faltante agrupando en este orden: Generales, Personal (Vacunas/Cursos), Supervisor SSMS & Salud, Vehículos/Equipos, Medio ambiente, Social/Comunidad, Territorio/Extranjeros, Alimentos/Plaguicidas. Evalúa vacunas, cursos, seguros y contratos según el tipo de personal y, para actividades de riesgo, pide exámenes médicos FS.100 y perfiles asociados. Tras cada respuesta actualiza la lista sin repetir lo resuelto. Al finalizar entrega un resumen ejecutivo y checklist numerada en el campo "mensaje" y responde solo con un JSON puro {"mensaje":"texto","ids":["L001"],"cerrar":false,"proyecto":"","alcance":"","tipoContrato":"","personal":""}. Usa ids=null mientras falte información y establece cerrar=true solo cuando el usuario confirme que terminó. Evita bloques de código. Catálogo LS.025:\n${ls025Context}${historialPrompt}`;
 
   const apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
@@ -3677,20 +3740,24 @@ async function askAI() {
   }
 
   const data = await response.json();
-  const text = data.candidates[0].content.parts.map(p => p.text).join('');
-  conversation.push({ role: 'model', parts: [{ text }] });
-  saveConversation();
+  const rawText = data.candidates[0].content.parts.map(p => p.text).join('');
 
   // Intenta extraer JSON incluso si viene dentro de un bloque ```json
-  let jsonText = text;
-  const match = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  let jsonText = rawText;
+  const match = rawText.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (match) jsonText = match[1];
 
+  let parsed;
   try {
-    return JSON.parse(jsonText);
+    parsed = JSON.parse(jsonText);
   } catch (e) {
-    return { mensaje: text, ids: null, cerrar: false };
+    parsed = { mensaje: rawText, ids: null, cerrar: false };
   }
+
+  conversation.push({ role: 'model', parts: [{ text: parsed.mensaje }] });
+  saveConversation();
+
+  return parsed;
 }
 
 function renderConversation(){
