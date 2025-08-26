@@ -279,7 +279,12 @@ canvas{width:100%;height:300px;border-radius:8px}
     <div class="canvas-grid" style="margin-top:12px">
       <div class="canvas-card"><div class="small">Global A/P/O</div><canvas id="cv-donut" width="500" height="300"></canvas></div>
       <div class="canvas-card"><div class="small">Proyectos revisados por responsable</div><canvas id="cv-resp" width="500" height="300"></canvas></div>
-      <div class="canvas-card"><div class="small">Proyectos / mes (creados vs. aprobados)</div><canvas id="cv-series" width="500" height="300"></canvas></div>
+      <div class="canvas-card"><div class="small">Proyectos (creados vs. aprobados)
+        <select id="series-mode" class="small" style="float:right">
+          <option value="month">Mes</option>
+          <option value="day">Día</option>
+        </select>
+      </div><canvas id="cv-series" width="500" height="300"></canvas></div>
       <div class="canvas-card"><div class="small">Top 5 empresas con más “NO”</div><canvas id="cv-top5" width="500" height="300"></canvas></div>
       <div class="canvas-card"><div class="small">Estados globales</div><canvas id="cv-estados" width="500" height="300"></canvas></div>
       <div class="canvas-card"><div class="small">Proyectos por tipo</div><canvas id="cv-tipos" width="500" height="300"></canvas></div>
@@ -2412,6 +2417,7 @@ function toggleVista(){ const onCards = $("#cards").style.display!=="none"; $("#
 $("#search").addEventListener("input", renderDashboard);
 $("#filtro-tipo").addEventListener("change", renderDashboard);
 $("#filtro-estado").addEventListener("change", renderDashboard);
+$("#series-mode")?.addEventListener("change", drawAllCharts);
 
 /* ================== Gráficos Canvas (sin librerías) ================== */
 function drawDonut(canvas, aprob, parcial, observ){
@@ -2437,24 +2443,41 @@ function drawRespChart(canvas, labels, values){
     ctx.fillText(`${l} — ${values[i]}`, pad+4, y);
   });
 }
-function drawSeries(canvas, months, createdArr, approvedArr){
+function drawSeries(canvas, labels, createdArr, approvedArr, xTitle){
   const ctx=canvas.getContext("2d"); const W=canvas.width, H=canvas.height; ctx.clearRect(0,0,W,H);
   const pad=40; const max = Math.max(1, ...createdArr, ...approvedArr);
-  const stepX = (W-pad*2)/Math.max(1,(months.length-1));
+  const stepX = (W-pad*2)/Math.max(1,(labels.length-1));
   // axes
   ctx.strokeStyle="#334155"; ctx.beginPath(); ctx.moveTo(pad, H-pad); ctx.lineTo(W-pad, H-pad); ctx.moveTo(pad, pad); ctx.lineTo(pad, H-pad); ctx.stroke();
+  // Y ticks
+  const ticks=5; const stepY=(H-pad*2)/ticks; const valStep=Math.max(1, Math.ceil(max/ticks));
+  ctx.fillStyle="#1e293b"; ctx.font="12px system-ui"; ctx.textAlign="right";
+  for(let i=0;i<=ticks;i++){
+    const y=H-pad - i*stepY; const v=i*valStep;
+    ctx.beginPath(); ctx.moveTo(pad-4,y); ctx.lineTo(pad,y); ctx.strokeStyle="#334155"; ctx.stroke();
+    ctx.fillText(v, pad-6, y+4);
+  }
+  // axis labels
+  ctx.save(); ctx.translate(16, H/2); ctx.rotate(-Math.PI/2); ctx.textAlign="center"; ctx.fillText("Proyectos",0,0); ctx.restore();
+  ctx.textAlign="center"; ctx.fillText(xTitle, W/2, H-pad+32);
   function drawLine(arr){
     ctx.beginPath();
     arr.forEach((v,i)=>{
-      const x = pad + i*stepX; const y = (H-pad) - ( (H-pad*2)*(v/max) );
+      const x = pad + i*stepX; const y = (H-pad) - ((H-pad*2)*(v/max));
       if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
     });
     ctx.stroke();
   }
+  // legend
+  ctx.strokeStyle="#93c5fd"; ctx.beginPath(); ctx.moveTo(W-pad-120, pad); ctx.lineTo(W-pad-100, pad); ctx.stroke();
+  ctx.fillStyle="#1e293b"; ctx.textAlign="left"; ctx.fillText("Creados", W-pad-95, pad+4);
+  ctx.strokeStyle="#86efac"; ctx.beginPath(); ctx.moveTo(W-pad-120, pad+16); ctx.lineTo(W-pad-100, pad+16); ctx.stroke();
+  ctx.fillStyle="#1e293b"; ctx.fillText("Aprobados", W-pad-95, pad+20);
+  // lines
   ctx.strokeStyle="#93c5fd"; drawLine(createdArr);
   ctx.strokeStyle="#86efac"; drawLine(approvedArr);
-  ctx.fillStyle="#1e293b"; ctx.font="14px system-ui"; ctx.textAlign="center";
-  months.forEach((m,i)=>{ const x=pad + i*stepX; ctx.fillText(m, x, H-pad+16); });
+  ctx.fillStyle="#1e293b"; ctx.font="12px system-ui"; ctx.textAlign="center";
+  labels.forEach((m,i)=>{ const x=pad + i*stepX; if(labels.length>15 && i%5!==0) return; ctx.fillText(m, x, H-pad+16); });
 }
 function drawTop5(canvas, labels, values){
   const ctx=canvas.getContext("2d"); const W=canvas.width, H=canvas.height; ctx.clearRect(0,0,W,H);
@@ -2531,19 +2554,32 @@ function drawAllCharts(){
   const respValues = respLabels.map(r=>respMap.get(r));
   const c2=$("#cv-resp"); if(c2) drawRespChart(c2, respLabels, respValues);
 
-  // Series por mes (últimos 8)
-  const months=[]; const now=new Date();
-  for(let i=7;i>=0;i--){const d=new Date(now.getFullYear(), now.getMonth()-i, 1); months.push(d.toLocaleString(undefined,{month:"short"}));}
-  const createdArr=new Array(8).fill(0), approvedArr=new Array(8).fill(0);
-  Object.values(DBCACHE).forEach(emp=>{
-    Object.values(emp.proyectos||{}).forEach(pr=>{
-      const d = pr.proyecto?.creadoEn ? new Date(pr.proyecto.creadoEn) : new Date();
-      const idx = 7 - ( (now.getFullYear()*12+now.getMonth()) - (d.getFullYear()*12+d.getMonth()) );
+  // Series temporales
+  const mode = $("#series-mode")?.value || "month";
+  const now=new Date();
+  let labels=[], createdArr=[], approvedArr=[], xTitle="";
+  if(mode==="day"){
+    for(let i=29;i>=0;i--){const d=new Date(now.getFullYear(), now.getMonth(), now.getDate()-i); labels.push(d.toLocaleDateString(undefined,{day:"2-digit", month:"short"}));}
+    createdArr=new Array(30).fill(0); approvedArr=new Array(30).fill(0);
+    Object.values(DBCACHE).forEach(emp=>{ Object.values(emp.proyectos||{}).forEach(pr=>{
+      const d=pr.proyecto?.creadoEn?new Date(pr.proyecto.creadoEn):now;
+      const diff=Math.floor((now-d)/86400000); const idx=29-diff;
+      if(idx>=0 && idx<30) createdArr[idx]++;
+      if(estadoProyecto(pr)==="APROBADO" && idx>=0 && idx<30) approvedArr[idx]++;
+    }); });
+    xTitle="Días";
+  }else{
+    for(let i=7;i>=0;i--){const d=new Date(now.getFullYear(), now.getMonth()-i, 1); labels.push(d.toLocaleString(undefined,{month:"short"}));}
+    createdArr=new Array(8).fill(0); approvedArr=new Array(8).fill(0);
+    Object.values(DBCACHE).forEach(emp=>{ Object.values(emp.proyectos||{}).forEach(pr=>{
+      const d=pr.proyecto?.creadoEn?new Date(pr.proyecto.creadoEn):now;
+      const idx=7-((now.getFullYear()*12+now.getMonth())-(d.getFullYear()*12+d.getMonth()));
       if(idx>=0 && idx<8) createdArr[idx]++;
-      if(estadoProyecto(pr)==="APROBADO"){ if(idx>=0 && idx<8) approvedArr[idx]++; }
-    });
-  });
-  const c3=$("#cv-series"); if(c3) drawSeries(c3, months, createdArr, approvedArr);
+      if(estadoProyecto(pr)==="APROBADO" && idx>=0 && idx<8) approvedArr[idx]++;
+    }); });
+    xTitle="Meses";
+  }
+  const c3=$("#cv-series"); if(c3) drawSeries(c3, labels, createdArr, approvedArr, xTitle);
 
   // Top 5 empresas con más “N”
   const counts=[];
