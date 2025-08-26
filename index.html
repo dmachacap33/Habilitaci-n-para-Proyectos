@@ -2058,7 +2058,7 @@ function verificarRevisionesCompletas(clave,pid){
     if(completadas && !yaNotif){
       const creator = pr.proyecto?.capturadoPor || "";
       if(creator){
-        enviarCorreoOutlook(creator, `Revisiones completas ${pid}`, 'SST, MA y RSE finalizaron sus revisiones.');
+        // enviarCorreoOutlook(creator, `Revisiones completas ${pid}`, 'SST, MA y RSE finalizaron sus revisiones.');
       }
       const estSST=estadoLSSST(pr.ls025), estMA=estadoLSMA(pr.ls025), estRSE=estadoLSRSE(pr.ls025);
       const estPer=estadoPersonal(pr.personal), estVeh=estadoVehiculos(pr.vehiculos);
@@ -2685,9 +2685,11 @@ async function crearProyecto(){
   const sst = pr.proyecto?.responsables?.sst?.correo || "";
   const ma  = pr.proyecto?.responsables?.ma?.correo || "";
   const rse = pr.proyecto?.responsables?.rse?.correo || "";
+  const correoEmp = emp?.empresa?.datos?.correo || "";
+  const correoResp = pr.proyecto?.responsables?.proyecto?.correo || "";
   const carpeta = emp?.empresa?.datos?.carpeta || CARPETA_BASE;
-  const payload = {empresaClave:clave, proyectoId:pid, correoSST:sst, correoMA:ma, correoRSE:rse, carpeta};
-  const correos = [sst,ma,rse].filter(Boolean).join(",");
+  const payload = {empresaClave:clave, proyectoId:pid, correoSST:sst, correoMA:ma, correoRSE:rse, correoEmp, correoResp, carpeta};
+  const correos = [sst,ma,rse,correoResp,correoEmp].filter(Boolean).join(",");
   try{
     await enviarASheet(payload);
     // ... (el resto de la lógica de correo se mantiene igual)
@@ -3312,8 +3314,13 @@ function pdfYCorreo(clave,pid,opts={}){
       <div class="no-print" style="margin-top:12px"><button onclick="window.print()">Imprimir / Guardar PDF</button></div>
     </body></html>`;
   w.document.write(html); w.document.close();
-  const correoResp = opts.destinatarios || snap.proyecto?.responsables?.proyecto?.correo || (snap.empresa?.datos?.correo||"");
-  setTimeout(()=>{ window.open(`mailto:${correoResp}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`,'_blank'); }, 800);
+  // const correoResp = opts.destinatarios || snap.proyecto?.responsables?.proyecto?.correo || (snap.empresa?.datos?.correo||"");
+  // setTimeout(()=>{ window.open(`mailto:${correoResp}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`,'_blank'); }, 800);
+  if(opts.destinatarios){
+    const dests = opts.destinatarios.split(',');
+    const accionEnv = opts.accion || 'Devolución';
+    enviarASheet({action:'sendActionEmail', data:{accion:accionEnv, empresaClave:clave, proyectoId:pid, correoEmp:dests[0]||'', correoResp:dests[1]||'', asunto:opts.asunto, cuerpo:opts.cuerpo, pdfHtml:html}});
+  }
 }
 
 /* ================== Resumen / Export ================== */
@@ -3394,8 +3401,47 @@ function registrarAccion(){
   const pr = ensureProyecto(clave,pid);
   const estSST = estadoLSSST(pr.ls025), estMA = estadoLSMA(pr.ls025), estRSE = estadoLSRSE(pr.ls025);
   const estPer = estadoPersonal(pr.personal), estVeh = estadoVehiculos(pr.vehiculos);
-  registrarRevision(clave,pid,estSST,estMA,estRSE,estPer,estVeh,USUARIO.nombre,$("#rev-accion").value,USUARIO.correo);
-  enviarResultadosRevision(clave,pid);
+  const accion = $("#rev-accion").value;
+  registrarRevision(clave,pid,estSST,estMA,estRSE,estPer,estVeh,USUARIO.nombre,accion,USUARIO.correo);
+  if(accion==="Recibido"){
+    const emp=DBCACHE[clave];
+    const sstObj=pr.proyecto?.responsables?.sst||{};
+    const maObj=pr.proyecto?.responsables?.ma||{};
+    const rseObj=pr.proyecto?.responsables?.rse||{};
+    const respObj=pr.proyecto?.responsables?.proyecto||{};
+    const correoEmp=emp?.empresa?.datos?.correo||"";
+    const payload={
+      action:'sendActionEmail',
+      data:{
+        accion:'Recibido',
+        empresaClave:clave,
+        proyectoId:pid,
+        carpeta:emp?.empresa?.datos?.carpeta||'',
+        correoSST:sstObj.correo||'',
+        correoMA:maObj.correo||'',
+        correoRSE:rseObj.correo||'',
+        correoResp:respObj.correo||'',
+        correoEmp,
+        nomSST:sstObj.nombre||'',
+        nomMA:maObj.nombre||'',
+        nomRSE:rseObj.nombre||'',
+        nomResp:respObj.nombre||''
+      }
+    };
+    enviarASheet(payload);
+  } else if(accion==="Devolución"){
+    const emp=DBCACHE[clave];
+    const empName=emp?.empresa?.datos?.empresa || emp?.empresa?.nombre || clave;
+    const correoEmp=emp?.empresa?.datos?.correo||"";
+    const correoResp=pr.proyecto?.responsables?.proyecto?.correo||"";
+    const destinatarios=[correoEmp,correoResp].filter(Boolean).join(",");
+    if(destinatarios){
+      const allOk=[estSST,estMA,estRSE,estPer,estVeh].every(s=>s==="APROBADO");
+      const asunto=allOk?`Carpeta aprobada ${empName} ${pid}`:`Carpeta revisada ${empName} ${pid}`;
+      const cuerpo=allOk?"Su carpeta ha sido aprobada y puede pasar a recoger su carpeta física." : "Su carpeta fue revisada y se adjunta PDF con observaciones para subsanar.";
+      pdfYCorreo(clave,pid,{destinatarios,asunto,cuerpo,skipRevision:true,accion:'Devolución'});
+    }
+  }
 }
 
 async function notificarSiguiente(){
@@ -3406,41 +3452,26 @@ async function notificarSiguiente(){
   const sst=pr.proyecto?.responsables?.sst?.correo||"";
   const ma=pr.proyecto?.responsables?.ma?.correo||"";
   const rse=pr.proyecto?.responsables?.rse?.correo||"";
+  const correoEmp=emp?.empresa?.datos?.correo||"";
+  const correoResp=pr.proyecto?.responsables?.proyecto?.correo||"";
   const carpeta=emp?.empresa?.datos?.carpeta||CARPETA_BASE;
   const estSST=estadoLSSST(pr.ls025), estMA=estadoLSMA(pr.ls025), estRSE=estadoLSRSE(pr.ls025);
   const estPer=estadoPersonal(pr.personal), estVeh=estadoVehiculos(pr.vehiculos);
-  const payload={empresaClave:clave,proyectoId:pid,correoSST:sst,correoMA:ma,correoRSE:rse,carpeta};
+  const payload={empresaClave:clave,proyectoId:pid,correoSST:sst,correoMA:ma,correoRSE:rse,correoEmp,correoResp,carpeta};
   if(!confirm("¿Notificar a SST/MA/RSE y registrar en la hoja?")) return;
   try{
     const r = await enviarASheet(payload);
     const empName = emp?.empresa?.datos?.empresa || emp?.empresa?.nombre || clave;
     const subject = `Carpeta para habilitar ${empName} ${pid}`;
     const body = `Usted está asignado para revisar la carpeta.\n\nFavor ingresar el siguiente link para su ingreso:\n\n`;
-    [sst,ma,rse].filter(Boolean).forEach((c,i)=>{
-      setTimeout(()=>enviarCorreoOutlook(c, subject, body), i*500);
-    });
+    // [sst,ma,rse,correoResp,correoEmp].filter(Boolean).forEach((c,i)=>{
+    //   setTimeout(()=>enviarCorreoOutlook(c, subject, body), i*500);
+    // });
       registrarRevision(clave,pid,estSST,estMA,estRSE,estPer,estVeh,USUARIO.nombre,"Notificación a SST/MA/RSE",USUARIO.correo);
     alert(r?.status||"Registro enviado");
   }catch(err){
     alert("Error al enviar: "+err.message);
   }
-}
-
-function enviarResultadosRevision(clave,pid){
-  const emp=DBCACHE[clave];
-  const pr=ensureProyecto(clave,pid);
-  const estSST=estadoLSSST(pr.ls025), estMA=estadoLSMA(pr.ls025), estRSE=estadoLSRSE(pr.ls025);
-  const estPer=estadoPersonal(pr.personal), estVeh=estadoVehiculos(pr.vehiculos);
-  if(![estSST,estMA,estRSE].every(s=>s && !s.startsWith("SIN"))) return;
-  const empName=emp?.empresa?.datos?.empresa || emp?.empresa?.nombre || clave;
-  const correoEmp=emp?.empresa?.datos?.correo||"";
-  const correoResp=pr.proyecto?.responsables?.proyecto?.correo||"";
-  const destinatarios=[correoEmp,correoResp].filter(Boolean).join(",");
-  if(!destinatarios) return;
-  const allOk=[estSST,estMA,estRSE,estPer,estVeh].every(s=>s==="APROBADO");
-  const asunto=allOk?`Carpeta aprobada ${empName} ${pid}`:`Carpeta revisada ${empName} ${pid}`;
-  const cuerpo=allOk?"Su carpeta ha sido aprobada y puede pasar a recoger su carpeta física.":"Su carpeta fue revisada y se adjunta PDF con observaciones para subsanar.";
-  pdfYCorreo(clave,pid,{destinatarios,asunto,cuerpo,skipRevision:true});
 }
 
 /* ================== Selectores de empresa/proyecto en paneles ================== */
