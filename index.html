@@ -279,7 +279,12 @@ canvas{width:100%;height:300px;border-radius:8px}
     <div class="canvas-grid" style="margin-top:12px">
       <div class="canvas-card"><div class="small">Global A/P/O</div><canvas id="cv-donut" width="500" height="300"></canvas></div>
       <div class="canvas-card"><div class="small">Proyectos revisados por responsable</div><canvas id="cv-resp" width="500" height="300"></canvas></div>
-      <div class="canvas-card"><div class="small">Proyectos / mes (creados vs. aprobados)</div><canvas id="cv-series" width="500" height="300"></canvas></div>
+      <div class="canvas-card"><div class="small">Proyectos (creados vs. aprobados)
+        <select id="series-mode" class="small" style="float:right">
+          <option value="month">Mes</option>
+          <option value="day">Día</option>
+        </select>
+      </div><canvas id="cv-series" width="500" height="300"></canvas></div>
       <div class="canvas-card"><div class="small">Top 5 empresas con más “NO”</div><canvas id="cv-top5" width="500" height="300"></canvas></div>
       <div class="canvas-card"><div class="small">Estados globales</div><canvas id="cv-estados" width="500" height="300"></canvas></div>
       <div class="canvas-card"><div class="small">Proyectos por tipo</div><canvas id="cv-tipos" width="500" height="300"></canvas></div>
@@ -1565,18 +1570,31 @@ let ls025FilteredIds = null;
 let conversation = JSON.parse(localStorage.getItem('aiConversation') || 'null');
 let HISTORIAL = {};
 let currentProyecto = null;
-if (!conversation) {
-  conversation = [{
+
+function initialConversation(){
+  return [{
     role: 'model',
     parts: [{
-      text: 'Por favor, cuéntame TODO sobre el proyecto: de qué se trata, dónde se hará (estación/DDV/terminal, ciudad/país), fechas y duración, actividades principales (p. ej., conducción, trabajos en caliente, izaje, alturas, espacio confinado, electricidad, arenado, hot tap, excavación), si habrá campamentos y rutas, cuántas personas y roles, si hay conductores u operadores de equipo pesado, si manipulan sustancias químicas o alimentos, si trabajarán fuera de Bolivia o con personal extranjero, vehículos/equipos previstos y cualquier tema ambiental (licencias, desmonte, áridos, ruido/emisiones).'
+      text: 'Hola, ¿qué tal? Soy iDavid y puedo ayudarte con el formulario LS.025. Cuéntame todo sobre el proyecto: de qué se trata, dónde se realizará (estación/DDV/terminal, ciudad/país), fechas y duración, actividades principales (conducción, trabajos en caliente, izaje, alturas, espacio confinado, electricidad, arenado, hot tap, excavación), si habrá campamentos y rutas, cuántas personas y roles intervendrán, si hay conductores u operadores de equipo pesado, si manipulan sustancias químicas o alimentos, si trabajarán fuera de Bolivia o con personal extranjero, los vehículos o equipos previstos y cualquier tema ambiental (licencias, desmonte, áridos, ruido/emisiones).'
     }]
   }];
+}
+if (
+  !conversation ||
+  conversation[conversation.length-1]?.parts?.[0]?.text?.trim()?.startsWith('{') ||
+  conversation[conversation.length-1]?.parts?.[0]?.text?.includes('Formulario LS.025 completado')
+) {
+  conversation = initialConversation();
+  saveConversation();
 }
 function saveConversation(){
   const max = 50;
   const toSave = conversation.slice(-max);
   localStorage.setItem('aiConversation', JSON.stringify(toSave));
+}
+function resetConversation(){
+  conversation = initialConversation();
+  saveConversation();
 }
 function persistDB(){
   if (database) {
@@ -2399,6 +2417,7 @@ function toggleVista(){ const onCards = $("#cards").style.display!=="none"; $("#
 $("#search").addEventListener("input", renderDashboard);
 $("#filtro-tipo").addEventListener("change", renderDashboard);
 $("#filtro-estado").addEventListener("change", renderDashboard);
+$("#series-mode")?.addEventListener("change", drawAllCharts);
 
 /* ================== Gráficos Canvas (sin librerías) ================== */
 function drawDonut(canvas, aprob, parcial, observ){
@@ -2424,24 +2443,41 @@ function drawRespChart(canvas, labels, values){
     ctx.fillText(`${l} — ${values[i]}`, pad+4, y);
   });
 }
-function drawSeries(canvas, months, createdArr, approvedArr){
+function drawSeries(canvas, labels, createdArr, approvedArr, xTitle){
   const ctx=canvas.getContext("2d"); const W=canvas.width, H=canvas.height; ctx.clearRect(0,0,W,H);
   const pad=40; const max = Math.max(1, ...createdArr, ...approvedArr);
-  const stepX = (W-pad*2)/Math.max(1,(months.length-1));
+  const stepX = (W-pad*2)/Math.max(1,(labels.length-1));
   // axes
   ctx.strokeStyle="#334155"; ctx.beginPath(); ctx.moveTo(pad, H-pad); ctx.lineTo(W-pad, H-pad); ctx.moveTo(pad, pad); ctx.lineTo(pad, H-pad); ctx.stroke();
+  // Y ticks
+  const ticks=5; const stepY=(H-pad*2)/ticks; const valStep=Math.max(1, Math.ceil(max/ticks));
+  ctx.fillStyle="#1e293b"; ctx.font="12px system-ui"; ctx.textAlign="right";
+  for(let i=0;i<=ticks;i++){
+    const y=H-pad - i*stepY; const v=i*valStep;
+    ctx.beginPath(); ctx.moveTo(pad-4,y); ctx.lineTo(pad,y); ctx.strokeStyle="#334155"; ctx.stroke();
+    ctx.fillText(v, pad-6, y+4);
+  }
+  // axis labels
+  ctx.save(); ctx.translate(16, H/2); ctx.rotate(-Math.PI/2); ctx.textAlign="center"; ctx.fillText("Proyectos",0,0); ctx.restore();
+  ctx.textAlign="center"; ctx.fillText(xTitle, W/2, H-pad+32);
   function drawLine(arr){
     ctx.beginPath();
     arr.forEach((v,i)=>{
-      const x = pad + i*stepX; const y = (H-pad) - ( (H-pad*2)*(v/max) );
+      const x = pad + i*stepX; const y = (H-pad) - ((H-pad*2)*(v/max));
       if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
     });
     ctx.stroke();
   }
+  // legend
+  ctx.strokeStyle="#93c5fd"; ctx.beginPath(); ctx.moveTo(W-pad-120, pad); ctx.lineTo(W-pad-100, pad); ctx.stroke();
+  ctx.fillStyle="#1e293b"; ctx.textAlign="left"; ctx.fillText("Creados", W-pad-95, pad+4);
+  ctx.strokeStyle="#86efac"; ctx.beginPath(); ctx.moveTo(W-pad-120, pad+16); ctx.lineTo(W-pad-100, pad+16); ctx.stroke();
+  ctx.fillStyle="#1e293b"; ctx.fillText("Aprobados", W-pad-95, pad+20);
+  // lines
   ctx.strokeStyle="#93c5fd"; drawLine(createdArr);
   ctx.strokeStyle="#86efac"; drawLine(approvedArr);
-  ctx.fillStyle="#1e293b"; ctx.font="14px system-ui"; ctx.textAlign="center";
-  months.forEach((m,i)=>{ const x=pad + i*stepX; ctx.fillText(m, x, H-pad+16); });
+  ctx.fillStyle="#1e293b"; ctx.font="12px system-ui"; ctx.textAlign="center";
+  labels.forEach((m,i)=>{ const x=pad + i*stepX; if(labels.length>15 && i%5!==0) return; ctx.fillText(m, x, H-pad+16); });
 }
 function drawTop5(canvas, labels, values){
   const ctx=canvas.getContext("2d"); const W=canvas.width, H=canvas.height; ctx.clearRect(0,0,W,H);
@@ -2513,29 +2549,45 @@ function drawAllCharts(){
       seen.forEach(r=>{ respMap.set(r, (respMap.get(r)||0)+1); });
     });
   });
-  const respLabels = Array.from(respMap.keys());
+  // Excluir acciones automáticas del sistema
+  const respLabels = Array.from(respMap.keys()).filter(r=>!/^sistema/i.test(r));
   const respValues = respLabels.map(r=>respMap.get(r));
   const c2=$("#cv-resp"); if(c2) drawRespChart(c2, respLabels, respValues);
 
-  // Series por mes (últimos 8)
-  const months=[]; const now=new Date();
-  for(let i=7;i>=0;i--){const d=new Date(now.getFullYear(), now.getMonth()-i, 1); months.push(d.toLocaleString(undefined,{month:"short"}));}
-  const createdArr=new Array(8).fill(0), approvedArr=new Array(8).fill(0);
-  Object.values(DBCACHE).forEach(emp=>{
-    Object.values(emp.proyectos||{}).forEach(pr=>{
-      const d = pr.proyecto?.creadoEn ? new Date(pr.proyecto.creadoEn) : new Date();
-      const idx = 7 - ( (now.getFullYear()*12+now.getMonth()) - (d.getFullYear()*12+d.getMonth()) );
+  // Series temporales
+  const mode = $("#series-mode")?.value || "month";
+  const now=new Date();
+  let labels=[], createdArr=[], approvedArr=[], xTitle="";
+  if(mode==="day"){
+    for(let i=29;i>=0;i--){const d=new Date(now.getFullYear(), now.getMonth(), now.getDate()-i); labels.push(d.toLocaleDateString(undefined,{day:"2-digit", month:"short"}));}
+    createdArr=new Array(30).fill(0); approvedArr=new Array(30).fill(0);
+    Object.values(DBCACHE).forEach(emp=>{ Object.values(emp.proyectos||{}).forEach(pr=>{
+      const d=pr.proyecto?.creadoEn?new Date(pr.proyecto.creadoEn):now;
+      const diff=Math.floor((now-d)/86400000); const idx=29-diff;
+      if(idx>=0 && idx<30) createdArr[idx]++;
+      if(estadoProyecto(pr)==="APROBADO" && idx>=0 && idx<30) approvedArr[idx]++;
+    }); });
+    xTitle="Días";
+  }else{
+    for(let i=7;i>=0;i--){const d=new Date(now.getFullYear(), now.getMonth()-i, 1); labels.push(d.toLocaleString(undefined,{month:"short"}));}
+    createdArr=new Array(8).fill(0); approvedArr=new Array(8).fill(0);
+    Object.values(DBCACHE).forEach(emp=>{ Object.values(emp.proyectos||{}).forEach(pr=>{
+      const d=pr.proyecto?.creadoEn?new Date(pr.proyecto.creadoEn):now;
+      const idx=7-((now.getFullYear()*12+now.getMonth())-(d.getFullYear()*12+d.getMonth()));
       if(idx>=0 && idx<8) createdArr[idx]++;
-      if(estadoProyecto(pr)==="APROBADO"){ if(idx>=0 && idx<8) approvedArr[idx]++; }
-    });
-  });
-  const c3=$("#cv-series"); if(c3) drawSeries(c3, months, createdArr, approvedArr);
+      if(estadoProyecto(pr)==="APROBADO" && idx>=0 && idx<8) approvedArr[idx]++;
+    }); });
+    xTitle="Meses";
+  }
+  const c3=$("#cv-series"); if(c3) drawSeries(c3, labels, createdArr, approvedArr, xTitle);
 
   // Top 5 empresas con más “N”
   const counts=[];
   Object.keys(DBCACHE).forEach(clave=>{
-    let n=0;
     const emp=DBCACHE[clave];
+    const name = emp?.empresa?.datos?.empresa || emp?.empresa?.nombre;
+    if(!name) return; // Ignorar nodos técnicos
+    let n=0;
     Object.values(emp.proyectos||{}).forEach(pr=>{
       (pr.ls025?.respuestas||[]).forEach(r=>{ if(r.valor==="N") n++; });
       (pr.personal||[]).forEach(p=>{
@@ -2544,7 +2596,6 @@ function drawAllCharts(){
       });
       (pr.vehiculos||[]).forEach(v=> Object.values(v.requisitos||{}).forEach(x=>{ if(x==="N") n++; }));
     });
-    const name = emp.empresa?.datos?.empresa || emp.empresa?.nombre || clave;
     counts.push({name, n});
   });
   counts.sort((a,b)=>b.n-a.n);
@@ -2561,11 +2612,14 @@ function drawAllCharts(){
   const c6=$("#cv-tipos"); if(c6) drawTypeChart(c6, Object.keys(typeCounts), Object.values(typeCounts));
 
   // Top 5 empresas con más proyectos
-  const projCounts=Object.keys(DBCACHE).map(clave=>{
-    const count=Object.keys(DBCACHE[clave].proyectos||{}).length;
-    const name=DBCACHE[clave].empresa?.datos?.empresa || DBCACHE[clave].empresa?.nombre || clave;
-    return {name,count};
-  });
+  const projCounts=Object.keys(DBCACHE).reduce((arr,clave)=>{
+    const emp=DBCACHE[clave];
+    const name=emp?.empresa?.datos?.empresa || emp?.empresa?.nombre;
+    if(!name) return arr; // Omitir nodos que no son empresas
+    const count=Object.keys(emp.proyectos||{}).length;
+    arr.push({name,count});
+    return arr;
+  },[]);
   projCounts.sort((a,b)=>b.count-a.count);
   const topProj=projCounts.slice(0,5);
   const c7=$("#cv-topproj"); if(c7) drawTopEmp(c7, topProj.map(x=>x.name), topProj.map(x=>x.count));
@@ -2838,7 +2892,7 @@ function guardarLS025(){
   persistDB();
 }
 
-function actualizarLS025(reqId, comentario, clave, pid){
+function actualizarLS025(reqId, valor, comentario, clave, pid){
   const pr = ensureProyecto(clave,pid);
   if(!pr.ls025) pr.ls025 = {respuestas:[]};
   const arr = pr.ls025.respuestas;
@@ -2848,32 +2902,66 @@ function actualizarLS025(reqId, comentario, clave, pid){
   }
 
   const txt = comentario.trim();
-  // store comment without automatically prefixing reviewer name
-  arr.push({
-    reqId,
-    valor:"N",
-    comentario:txt,
-    autor:"",
-    modificadoEn:nowIso()
-  });
-  persistDB();
-  buildLs025();
+  if(valor==="N" || valor==="S"){
+    arr.push({
+      reqId,
+      valor,
+      comentario:txt,
+      autor:"",
+      modificadoEn:nowIso()
+    });
+  }
 }
 
-function autoLs025FromPersonal(code, comentario){
+function autoLs025FromPersonal(code){
   const reqId = MAP_PERSONAL_TO_LS025[code];
   if(!reqId) return;
   const clave=$("#per-empresaSel").value;
   const pid=$("#per-proyectoSel").value;
-  actualizarLS025(reqId, comentario, clave, pid);
+  const pr = proyectoActualPersonal();
+  const personas = pr.personal || [];
+  let allS = personas.length>0;
+  let anyN = false;
+  const comentarios=[];
+  personas.forEach(p=>{
+    const val = (p.requisitos||{})[code] || "";
+    const obs = (p.requisitosObs||{})[code] || "";
+    if(val==="N"){
+      anyN = true;
+      const com = obs ? `${p.nombre}: ${obs}` : `${p.nombre||""}`;
+      comentarios.push(com.trim());
+    }
+    if(val!=="S") allS=false;
+  });
+
+  if(anyN){
+    actualizarLS025(reqId, "N", comentarios.join("; "), clave, pid);
+  }else if(allS){
+    actualizarLS025(reqId, "S", "", clave, pid);
+  }else{
+    actualizarLS025(reqId, "", "", clave, pid);
+  }
 }
 
-function autoLs025FromVeh(code, comentario){
+function autoLs025FromVeh(code){
   const reqId = MAP_VEH_TO_LS025[code];
   if(!reqId) return;
   const clave=$("#veh-empresaSel").value;
   const pid=$("#veh-proyectoSel").value;
-  actualizarLS025(reqId, comentario, clave, pid);
+  const pr = proyectoActualVeh();
+  const v = pr.vehiculos[editingVehIndex] || {};
+  const val = (v.requisitos||{})[code] || "";
+  const obs = (v.reqComentarios||{})[code] || "";
+  const comentario = obs ? `${v.vehiculoId}: ${obs}` : `${v.vehiculoId||""}`;
+  actualizarLS025(reqId, val, comentario, clave, pid);
+}
+
+function syncLs025FromPersona(){
+  Object.keys(MAP_PERSONAL_TO_LS025).forEach(code=>autoLs025FromPersonal(code));
+}
+
+function syncLs025FromVehiculo(){
+  Object.keys(MAP_VEH_TO_LS025).forEach(code=>autoLs025FromVeh(code));
 }
 
 /* ================== Personal ================== */
@@ -3001,18 +3089,17 @@ function editarPersona(idx){
     if(e.target.classList.contains("pf-req-com")){
       if(!p.requisitosObs) p.requisitosObs={};
       p.requisitosObs[e.target.dataset.code]=e.target.value.trim();
-      persistDB();
       return;
     }
     if(e.target.id==="pf-id") p.personaId=e.target.value.trim();
     else if(e.target.id==="pf-nombre") p.nombre=e.target.value.trim();
     else if(e.target.id==="pf-cargo") p.cargo=e.target.value.trim();
     else if(e.target.id==="pf-com") p.comentarios=e.target.value.trim();
-    persistDB(); renderTablaPersonal(); renderDashboard();
+    renderTablaPersonal(); renderDashboard();
   });
   box.addEventListener("change", e=>{
     if(e.target.classList.contains("pf-req-com")){
-      autoLs025FromPersonal(e.target.dataset.code, e.target.value.trim());
+      return;
     }else if(e.target.classList.contains("pf-req")){
       if(!p.requisitos) p.requisitos={};
       const code=e.target.dataset.code;
@@ -3020,12 +3107,10 @@ function editarPersona(idx){
       const com=box.querySelector(`input.pf-req-com[data-code="${code}"]`);
       if(e.target.value==="N"){
         com.style.display='block';
-        autoLs025FromPersonal(code,(p.requisitosObs||{})[code]||"");
       }else{
         com.style.display='none';
       }
       updateGuiasVisibility();
-      persistDB();
       renderTablaPersonal();
       renderDashboard();
     }
@@ -3045,7 +3130,7 @@ function agregarPerfilGuia(){
   if(p.guiasMedicas.find(g=>g.perfil===perfil)){ alert("Ese perfil ya existe"); return; }
   const items = Object.fromEntries(GUIAS_PERFILES[perfil].map(k=>[k,""]));
   p.guiasMedicas.push({perfil, items});
-  persistDB(); renderGuiasPersonales(); renderTablaPersonal(); renderDashboard();
+  renderGuiasPersonales(); renderTablaPersonal(); renderDashboard();
 }
 function renderGuiasPersonales(){
   const pr = proyectoActualPersonal(); const p = pr.personal[editingPersonaIndex];
@@ -3070,14 +3155,38 @@ function renderGuiasPersonales(){
     if(e.target.tagName==="SELECT" && e.target.dataset.gix!==undefined){
       const gix=+e.target.dataset.gix, code=e.target.dataset.code, v=e.target.value;
       const pr = proyectoActualPersonal(); pr.personal[editingPersonaIndex].guiasMedicas[gix].items[code]=v;
-      persistDB(); renderTablaPersonal(); renderDashboard();
+      renderTablaPersonal(); renderDashboard();
     }
   });
 }
 function borrarGuia(idx){
-  const pr = proyectoActualPersonal(); pr.personal[editingPersonaIndex].guiasMedicas.splice(idx,1); persistDB(); renderGuiasPersonales(); renderTablaPersonal(); renderDashboard();
+  const pr = proyectoActualPersonal(); pr.personal[editingPersonaIndex].guiasMedicas.splice(idx,1);
+  renderGuiasPersonales(); renderTablaPersonal(); renderDashboard();
 }
-function cerrarModal(id){ $("#"+id).style.display="none"; }
+function cerrarModal(id){
+  $("#"+id).style.display="none";
+  if(id==='modal-persona'){
+    syncLs025FromPersona();
+    const clave=$("#per-empresaSel").value;
+    const pid=$("#per-proyectoSel").value;
+    logProyecto(clave,pid);
+    persistDB();
+    editingPersonaIndex=-1;
+    renderTablaPersonal();
+    renderDashboard();
+    buildLs025();
+  }else if(id==='modal-vehiculo'){
+    syncLs025FromVehiculo();
+    const clave=$("#veh-empresaSel").value;
+    const pid=$("#veh-proyectoSel").value;
+    logProyecto(clave,pid);
+    persistDB();
+    editingVehIndex=-1;
+    renderTablaVehiculos();
+    renderDashboard();
+    buildLs025();
+  }
+}
 
 /* ================== Vehículos ================== */
 let editingVehIndex=-1;
@@ -3170,7 +3279,6 @@ function editarVehiculo(idx){
     if(e.target.classList.contains("vf-req-com")){
       if(!v.reqComentarios) v.reqComentarios={};
       v.reqComentarios[e.target.dataset.code]=e.target.value.trim();
-      persistDB();
       return;
     }
     if(e.target.id==="vf-id") v.vehiculoId=e.target.value.trim();
@@ -3178,11 +3286,11 @@ function editarVehiculo(idx){
     else if(e.target.id==="vf-marca") v.marca=e.target.value.trim();
     else if(e.target.id==="vf-tipo") v.tipo=e.target.value.trim();
     else if(e.target.id==="vf-com") v.comentarios=e.target.value.trim();
-    persistDB(); renderTablaVehiculos(); renderDashboard();
+    renderTablaVehiculos(); renderDashboard();
   });
   box.addEventListener("change", e=>{
     if(e.target.classList.contains("vf-req-com")){
-      autoLs025FromVeh(e.target.dataset.code, e.target.value.trim());
+      return;
     }else if(e.target.classList.contains("vf-req")){
       if(!v.requisitos) v.requisitos={};
       const code=e.target.dataset.code;
@@ -3190,11 +3298,9 @@ function editarVehiculo(idx){
       const com=box.querySelector(`input.vf-req-com[data-code="${code}"]`);
       if(e.target.value==="N"){
         com.style.display='block';
-        autoLs025FromVeh(code,(v.reqComentarios||{})[code]||"");
       }else{
         com.style.display='none';
       }
-      persistDB();
       renderTablaVehiculos();
       renderDashboard();
     }
@@ -3315,7 +3421,8 @@ function pdfYCorreo(clave,pid,opts={}){
     </body></html>`;
   w.document.write(html); w.document.close();
   const correoResp = opts.destinatarios || snap.proyecto?.responsables?.proyecto?.correo || (snap.empresa?.datos?.correo||"");
-  setTimeout(()=>{ window.open(`mailto:${correoResp}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`,'_blank'); }, 800);
+  // Envío automático mediante Power Automate
+  enviarCorreoOutlook(correoResp, asunto, cuerpo, html);
 }
 
 /* ================== Resumen / Export ================== */
@@ -3623,6 +3730,9 @@ async function handleUserMessage() {
         HISTORIAL[k].push(entry);
       }
       setTimeout(() => chatContainer.classList.remove('visible'), 500);
+      resetConversation();
+      currentProyecto = null;
+      ls025FilteredIds = null;
     }
   } catch (error) {
     console.error("Error al contactar a la IA:", error);
@@ -3660,7 +3770,7 @@ async function askAI() {
     historialPrompt = '\nHistorial previo para proyectos similares (' + currentProyecto + '):\n' +
       historial.map(h => `- Alcance: ${h.alcance}; TipoContrato: ${h.tipoContrato}; Personal: ${h.personal}; LS025: ${(h.ids||[]).join(',')}`).join('\n');
   }
-  const systemInstruction = `Eres Asistente de Habilitación LS.025. Abre siempre con una sola pregunta amplia para que el usuario describa todo el proyecto: tipo, ubicación, fechas, actividades, campamentos o rutas, cantidad y roles de personas, conductores u operadores, manejo de sustancias o alimentos, trabajo fuera de Bolivia o con personal extranjero, vehículos/equipos y temas ambientales. Detecta automáticamente los requisitos aplicables del catálogo (1-95) y devuélvelos como "Requisitos detectados sí o sí" con breve justificación. Luego pregunta solo lo faltante agrupando en este orden: Generales, Personal (Vacunas/Cursos), Supervisor SSMS & Salud, Vehículos/Equipos, Medio ambiente, Social/Comunidad, Territorio/Extranjeros, Alimentos/Plaguicidas. Tras cada respuesta actualiza la lista y marca pendientes. Al finalizar entrega un resumen ejecutivo y checklist numerada en el campo "mensaje" y responde solo con un JSON puro {"mensaje":"texto","ids":["L001"],"cerrar":false,"proyecto":"","alcance":"","tipoContrato":"","personal":""}. Usa ids=null mientras falte información, establece cerrar=true solo cuando el usuario confirme que terminó y evita bloques de código. Catálogo LS.025:\n${ls025Context}${historialPrompt}`;
+  const systemInstruction = `Eres Asistente de Habilitación LS.025. Saluda de forma cordial (por ejemplo: "Hola, ¿cómo estás?") y luego realiza una sola pregunta amplia para que el usuario describa el proyecto: tipo, ubicación, fechas, duración, actividades principales (conducción, trabajos en caliente, izaje, alturas, espacio confinado, electricidad, arenado, hot tap, excavación), campamentos o rutas, cantidad y roles de personas, conductores u operadores de equipo pesado, manipulación de sustancias químicas o alimentos, trabajo fuera de Bolivia o con personal extranjero, vehículos/equipos y temas ambientales. Detecta automáticamente los requisitos aplicables del catálogo (1-95). Siempre incluye responsables de SST, MA y RSE aunque el usuario no los mencione. Pregunta solo lo faltante agrupando en este orden: Generales, Personal (Vacunas/Cursos), Supervisor SSMS & Salud, Vehículos/Equipos, Medio ambiente, Social/Comunidad, Territorio/Extranjeros, Alimentos/Plaguicidas. Evalúa vacunas, cursos, seguros y contratos según el tipo de personal y, para actividades de riesgo, pide exámenes médicos FS.100 y perfiles asociados. Tras cada respuesta actualiza la lista sin repetir lo resuelto. En el campo "mensaje" responde de manera breve y natural sin enumerar los requisitos ni mostrar los IDs; solo indica avances, por ejemplo "requisitos filtrados". Usa el arreglo "ids" para enviar internamente los requisitos detectados. Al finalizar, cuando el usuario confirme que terminó, ofrece un resumen ejecutivo breve (sin listar IDs) y establece "cerrar":true. Responde siempre con un JSON puro {"mensaje":"texto","ids":["L001"],"cerrar":false,"proyecto":"","alcance":"","tipoContrato":"","personal":""}. Usa ids=null mientras falte información. Evita bloques de código. Catálogo LS.025:\n${ls025Context}${historialPrompt}`;
 
   const apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
@@ -3681,20 +3791,24 @@ async function askAI() {
   }
 
   const data = await response.json();
-  const text = data.candidates[0].content.parts.map(p => p.text).join('');
-  conversation.push({ role: 'model', parts: [{ text }] });
-  saveConversation();
+  const rawText = data.candidates[0].content.parts.map(p => p.text).join('');
 
   // Intenta extraer JSON incluso si viene dentro de un bloque ```json
-  let jsonText = text;
-  const match = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  let jsonText = rawText;
+  const match = rawText.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (match) jsonText = match[1];
 
+  let parsed;
   try {
-    return JSON.parse(jsonText);
+    parsed = JSON.parse(jsonText);
   } catch (e) {
-    return { mensaje: text, ids: null, cerrar: false };
+    parsed = { mensaje: rawText, ids: null, cerrar: false };
   }
+
+  conversation.push({ role: 'model', parts: [{ text: parsed.mensaje }] });
+  saveConversation();
+
+  return parsed;
 }
 
 function renderConversation(){

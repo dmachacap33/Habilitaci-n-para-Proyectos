@@ -4,8 +4,10 @@ Aplicación HTML para el seguimiento de habilitaciones.
 
 ## Configuración
 
-Para resguardar las credenciales, el HTML carga las API keys desde un Web App de Google Sheets. Edita el bloque de configuración al inicio de `YPFBREV31.html` y coloca la URL del Web App (`sheetWebAppUrl`). Todas las API keys (Firebase, Gemini, etc.) se almacenan en la hoja `CLAVES` del Spreadsheet y se cargan dinámicamente, de modo que el archivo HTML se puede compartir sin exponerlas.  
+Para resguardar las credenciales, el HTML carga las API keys desde un Web App de Google Sheets. Edita el bloque de configuración al inicio de `YPFBREV31.html` y coloca la URL del Web App (`sheetWebAppUrl`). Todas las API keys (Firebase, Gemini, etc.) se almacenan en la hoja `CLAVES` del Spreadsheet y se cargan dinámicamente, de modo que el archivo HTML se puede compartir sin exponerlas.
 La función de proxy para Gemini también recupera la clave directamente desde la celda `P1` de la hoja **Hoja 1**.
+
+Para el envío automático de correos se debe definir en el entorno la variable global `POWER_AUTOMATE_URL` con la URL del flujo de Power Automate que realiza el envío. El HTML utilizará este endpoint para notificar a los responsables y adjuntar el reporte en PDF.
 
 ## Novedades
 
