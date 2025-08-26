@@ -22,3 +22,4 @@ La función de proxy para Gemini también recupera la clave directamente desde l
 - Se añadió un tour interactivo que guía al usuario por el Dashboard y la creación de proyectos la primera vez que ingresa.
 - El tour ahora es dinámico y adapta sus pasos según el rol (administrador, responsables SST/MA/RSE o empresa).
 - El pop del tour usa un degradado azul y recorre Dashboard, Cards Empresa, YPFB, LS.025, Personal, Vehículos y Resumen explicando su uso.
+- Las listas de validación de Personal y Vehículos guardan al instante cada selección y comentario en Firebase, incluyendo las observaciones marcadas con "N".

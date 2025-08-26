@@ -3015,22 +3015,7 @@ function editarPersona(idx){
   updateGuiasVisibility();
   $("#modal-persona").style.display="flex";
   box.addEventListener("input", e=>{
-    if(e.target.classList.contains("pf-req-com")){
-      if(!p.requisitosObs) p.requisitosObs={};
-      p.requisitosObs[e.target.dataset.code]=e.target.value.trim();
-      persistDB();
-      return;
-    }
-    if(e.target.id==="pf-id") p.personaId=e.target.value.trim();
-    else if(e.target.id==="pf-nombre") p.nombre=e.target.value.trim();
-    else if(e.target.id==="pf-cargo") p.cargo=e.target.value.trim();
-    else if(e.target.id==="pf-com") p.comentarios=e.target.value.trim();
-    persistDB(); renderTablaPersonal(); renderDashboard();
-  });
-  box.addEventListener("change", e=>{
-    if(e.target.classList.contains("pf-req-com")){
-      autoLs025FromPersonal(e.target.dataset.code, e.target.value.trim());
-    }else if(e.target.classList.contains("pf-req")){
+    if(e.target.classList.contains("pf-req")){
       if(!p.requisitos) p.requisitos={};
       const code=e.target.dataset.code;
       p.requisitos[code]=e.target.value;
@@ -3045,7 +3030,22 @@ function editarPersona(idx){
       persistDB();
       renderTablaPersonal();
       renderDashboard();
+      return;
     }
+    if(e.target.classList.contains("pf-req-com")){
+      if(!p.requisitosObs) p.requisitosObs={};
+      p.requisitosObs[e.target.dataset.code]=e.target.value.trim();
+      autoLs025FromPersonal(e.target.dataset.code, e.target.value.trim());
+      persistDB();
+      return;
+    }
+    if(e.target.id==="pf-id") p.personaId=e.target.value.trim();
+    else if(e.target.id==="pf-nombre") p.nombre=e.target.value.trim();
+    else if(e.target.id==="pf-cargo") p.cargo=e.target.value.trim();
+    else if(e.target.id==="pf-com") p.comentarios=e.target.value.trim();
+    persistDB();
+    renderTablaPersonal();
+    renderDashboard();
   });
 }
 function updateGuiasVisibility(){
@@ -3083,11 +3083,13 @@ function renderGuiasPersonales(){
     });
     tbl.appendChild(tbody); det.appendChild(tbl); cont.appendChild(det);
   });
-  cont.addEventListener("change", e=>{
+  cont.addEventListener("input", e=>{
     if(e.target.tagName==="SELECT" && e.target.dataset.gix!==undefined){
       const gix=+e.target.dataset.gix, code=e.target.dataset.code, v=e.target.value;
       const pr = proyectoActualPersonal(); pr.personal[editingPersonaIndex].guiasMedicas[gix].items[code]=v;
-      persistDB(); renderTablaPersonal(); renderDashboard();
+      persistDB();
+      renderTablaPersonal();
+      renderDashboard();
     }
   });
 }
@@ -3184,23 +3186,7 @@ function editarVehiculo(idx){
   box.appendChild(Object.assign(document.createElement("div"),{className:"section",innerHTML:`<label>Comentarios</label><textarea id="vf-com">${v.comentarios||""}</textarea>`}));
   $("#modal-vehiculo").style.display="flex";
   box.addEventListener("input", e=>{
-    if(e.target.classList.contains("vf-req-com")){
-      if(!v.reqComentarios) v.reqComentarios={};
-      v.reqComentarios[e.target.dataset.code]=e.target.value.trim();
-      persistDB();
-      return;
-    }
-    if(e.target.id==="vf-id") v.vehiculoId=e.target.value.trim();
-    else if(e.target.id==="vf-placa") v.placa=e.target.value.trim();
-    else if(e.target.id==="vf-marca") v.marca=e.target.value.trim();
-    else if(e.target.id==="vf-tipo") v.tipo=e.target.value.trim();
-    else if(e.target.id==="vf-com") v.comentarios=e.target.value.trim();
-    persistDB(); renderTablaVehiculos(); renderDashboard();
-  });
-  box.addEventListener("change", e=>{
-    if(e.target.classList.contains("vf-req-com")){
-      autoLs025FromVeh(e.target.dataset.code, e.target.value.trim());
-    }else if(e.target.classList.contains("vf-req")){
+    if(e.target.classList.contains("vf-req")){
       if(!v.requisitos) v.requisitos={};
       const code=e.target.dataset.code;
       v.requisitos[code] = e.target.value;
@@ -3214,7 +3200,23 @@ function editarVehiculo(idx){
       persistDB();
       renderTablaVehiculos();
       renderDashboard();
+      return;
     }
+    if(e.target.classList.contains("vf-req-com")){
+      if(!v.reqComentarios) v.reqComentarios={};
+      v.reqComentarios[e.target.dataset.code]=e.target.value.trim();
+      autoLs025FromVeh(e.target.dataset.code, e.target.value.trim());
+      persistDB();
+      return;
+    }
+    if(e.target.id==="vf-id") v.vehiculoId=e.target.value.trim();
+    else if(e.target.id==="vf-placa") v.placa=e.target.value.trim();
+    else if(e.target.id==="vf-marca") v.marca=e.target.value.trim();
+    else if(e.target.id==="vf-tipo") v.tipo=e.target.value.trim();
+    else if(e.target.id==="vf-com") v.comentarios=e.target.value.trim();
+    persistDB();
+    renderTablaVehiculos();
+    renderDashboard();
   });
 }
 
