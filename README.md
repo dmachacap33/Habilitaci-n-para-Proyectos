@@ -17,4 +17,7 @@ La función de proxy para Gemini también recupera la clave directamente desde l
 - Se envían notificaciones iniciales a SST/MA/RSE y se verifica automáticamente cuando los tres han concluido.
 - El Web App ahora puede recibir datos mediante un formulario que se envía a un iframe oculto y responde usando `postMessage`, lo que permite utilizar el HTML desde `file://` sin errores de CORS. Mantiene además la respuesta JSON con cabeceras `Access-Control-Allow-*` por si se usa `fetch` desde un origen HTTPS.
 - La función `enviarASheet` envía el JSON como `text/plain` para evitar el preflight y captura errores de red si la URL del Web App no es accesible.
-- El Web App ahora registra `correoSST` además de `correoMA` y `correoRSE` y notifica a todos los responsables.
+- El Web App ahora registra `correoSST`, `correoMA`, `correoRSE`, `correoEmp` y `correoResp` y notifica a todos los responsables.
+- Los correos de **Recibido** y **Devolución** se envían desde Apps Script. **Recibido** solo notifica la recepción a SST, MA, RSE, responsable del proyecto y correo de la empresa; **Devolución** adjunta automáticamente el PDF de la carpeta a la empresa y responsable del proyecto.
+- Se añadió un tour interactivo que guía al usuario por el Dashboard y la creación de proyectos la primera vez que ingresa.
+- El tour ahora es dinámico y adapta sus pasos según el rol (administrador, responsables SST/MA/RSE o empresa).
