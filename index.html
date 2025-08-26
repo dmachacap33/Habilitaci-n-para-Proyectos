@@ -1570,12 +1570,17 @@ function initialConversation(){
   return [{
     role: 'model',
     parts: [{
-      text: 'Por favor, cuéntame TODO sobre el proyecto: de qué se trata, dónde se hará (estación/DDV/terminal, ciudad/país), fechas y duración, actividades principales (p. ej., conducción, trabajos en caliente, izaje, alturas, espacio confinado, electricidad, arenado, hot tap, excavación), si habrá campamentos y rutas, cuántas personas y roles, si hay conductores u operadores de equipo pesado, si manipulan sustancias químicas o alimentos, si trabajarán fuera de Bolivia o con personal extranjero, vehículos/equipos previstos y cualquier tema ambiental (licencias, desmonte, áridos, ruido/emisiones).'
+      text: 'Hola, ¿qué tal? Soy iDavid y puedo ayudarte con el formulario LS.025. Cuéntame todo sobre el proyecto: de qué se trata, dónde se realizará (estación/DDV/terminal, ciudad/país), fechas y duración, actividades principales (conducción, trabajos en caliente, izaje, alturas, espacio confinado, electricidad, arenado, hot tap, excavación), si habrá campamentos y rutas, cuántas personas y roles intervendrán, si hay conductores u operadores de equipo pesado, si manipulan sustancias químicas o alimentos, si trabajarán fuera de Bolivia o con personal extranjero, los vehículos o equipos previstos y cualquier tema ambiental (licencias, desmonte, áridos, ruido/emisiones).'
     }]
   }];
 }
-if (!conversation) {
+if (
+  !conversation ||
+  conversation[conversation.length-1]?.parts?.[0]?.text?.trim()?.startsWith('{') ||
+  conversation[conversation.length-1]?.parts?.[0]?.text?.includes('Formulario LS.025 completado')
+) {
   conversation = initialConversation();
+  saveConversation();
 }
 function saveConversation(){
   const max = 50;
@@ -3719,7 +3724,7 @@ async function askAI() {
     historialPrompt = '\nHistorial previo para proyectos similares (' + currentProyecto + '):\n' +
       historial.map(h => `- Alcance: ${h.alcance}; TipoContrato: ${h.tipoContrato}; Personal: ${h.personal}; LS025: ${(h.ids||[]).join(',')}`).join('\n');
   }
-  const systemInstruction = `Eres Asistente de Habilitación LS.025. Interactúa de forma natural y amable. Comienza siempre con una sola pregunta amplia para que el usuario describa el proyecto: tipo, ubicación, fechas, duración, actividades principales (conducción, trabajos en caliente, izaje, alturas, espacio confinado, electricidad, arenado, hot tap, excavación), campamentos o rutas, cantidad y roles de personas, conductores u operadores de equipo pesado, manipulación de sustancias químicas o alimentos, trabajo fuera de Bolivia o con personal extranjero, vehículos/equipos y temas ambientales. Detecta automáticamente los requisitos aplicables del catálogo (1-95) y devuélvelos como "Requisitos detectados sí o sí" con breve justificación. Siempre incluye responsables de SST, MA y RSE aunque el usuario no los mencione. Pregunta solo lo faltante agrupando en este orden: Generales, Personal (Vacunas/Cursos), Supervisor SSMS & Salud, Vehículos/Equipos, Medio ambiente, Social/Comunidad, Territorio/Extranjeros, Alimentos/Plaguicidas. Evalúa vacunas, cursos, seguros y contratos según el tipo de personal y, para actividades de riesgo, pide exámenes médicos FS.100 y perfiles asociados. Tras cada respuesta actualiza la lista sin repetir lo resuelto. Al finalizar entrega un resumen ejecutivo y checklist numerada en el campo "mensaje" y responde solo con un JSON puro {"mensaje":"texto","ids":["L001"],"cerrar":false,"proyecto":"","alcance":"","tipoContrato":"","personal":""}. Usa ids=null mientras falte información y establece cerrar=true solo cuando el usuario confirme que terminó. Evita bloques de código. Catálogo LS.025:\n${ls025Context}${historialPrompt}`;
+  const systemInstruction = `Eres Asistente de Habilitación LS.025. Saluda de forma cordial (por ejemplo: "Hola, ¿cómo estás?") y luego realiza una sola pregunta amplia para que el usuario describa el proyecto: tipo, ubicación, fechas, duración, actividades principales (conducción, trabajos en caliente, izaje, alturas, espacio confinado, electricidad, arenado, hot tap, excavación), campamentos o rutas, cantidad y roles de personas, conductores u operadores de equipo pesado, manipulación de sustancias químicas o alimentos, trabajo fuera de Bolivia o con personal extranjero, vehículos/equipos y temas ambientales. Detecta automáticamente los requisitos aplicables del catálogo (1-95). Siempre incluye responsables de SST, MA y RSE aunque el usuario no los mencione. Pregunta solo lo faltante agrupando en este orden: Generales, Personal (Vacunas/Cursos), Supervisor SSMS & Salud, Vehículos/Equipos, Medio ambiente, Social/Comunidad, Territorio/Extranjeros, Alimentos/Plaguicidas. Evalúa vacunas, cursos, seguros y contratos según el tipo de personal y, para actividades de riesgo, pide exámenes médicos FS.100 y perfiles asociados. Tras cada respuesta actualiza la lista sin repetir lo resuelto. En el campo "mensaje" responde de manera breve y natural sin enumerar los requisitos ni mostrar los IDs; solo indica avances, por ejemplo "requisitos filtrados". Usa el arreglo "ids" para enviar internamente los requisitos detectados. Al finalizar, cuando el usuario confirme que terminó, ofrece un resumen ejecutivo breve (sin listar IDs) y establece "cerrar":true. Responde siempre con un JSON puro {"mensaje":"texto","ids":["L001"],"cerrar":false,"proyecto":"","alcance":"","tipoContrato":"","personal":""}. Usa ids=null mientras falte información. Evita bloques de código. Catálogo LS.025:\n${ls025Context}${historialPrompt}`;
 
   const apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
