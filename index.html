@@ -1580,7 +1580,8 @@ function saveConversation(){
 }
 function persistDB(){
   if (database) {
-    database.ref().set(DBCACHE)
+    const snapshot = JSON.parse(JSON.stringify(DBCACHE));
+    database.ref().set(snapshot)
       .catch(error=>{
         console.error("Error al guardar datos en Firebase:", error);
         alert("Error: No se pudieron guardar los cambios en la nube.");
@@ -3081,7 +3082,35 @@ function renderGuiasPersonales(){
 function borrarGuia(idx){
   const pr = proyectoActualPersonal(); pr.personal[editingPersonaIndex].guiasMedicas.splice(idx,1); persistDB(); renderGuiasPersonales(); renderTablaPersonal(); renderDashboard();
 }
-function cerrarModal(id){ $("#"+id).style.display="none"; }
+function cerrarModal(id){
+  if(id==='modal-persona'){
+    const pr = proyectoActualPersonal();
+    const p = pr.personal?.[editingPersonaIndex];
+    const box = document.getElementById('persona-form');
+    if(p && box){
+      box.querySelectorAll('input.pf-req-com').forEach(inp=>{
+        if(!p.requisitosObs) p.requisitosObs={};
+        p.requisitosObs[inp.dataset.code]=inp.value.trim();
+        const val = (p.requisitos||{})[inp.dataset.code] || '';
+        autoLs025FromPersonal(inp.dataset.code, inp.value.trim(), p.nombre, val);
+      });
+    }
+  }else if(id==='modal-vehiculo'){
+    const pr = proyectoActualVeh();
+    const v = pr.vehiculos?.[editingVehIndex];
+    const box = document.getElementById('vehiculo-form');
+    if(v && box){
+      box.querySelectorAll('input.vf-req-com').forEach(inp=>{
+        if(!v.reqComentarios) v.reqComentarios={};
+        v.reqComentarios[inp.dataset.code]=inp.value.trim();
+        const val = (v.requisitos||{})[inp.dataset.code] || '';
+        autoLs025FromVeh(inp.dataset.code, inp.value.trim(), v.placa, val);
+      });
+    }
+  }
+  persistDB();
+  $("#"+id).style.display="none";
+}
 
 /* ================== Vehículos ================== */
 let editingVehIndex=-1;
