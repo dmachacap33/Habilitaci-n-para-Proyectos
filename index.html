@@ -2685,9 +2685,11 @@ async function crearProyecto(){
   const sst = pr.proyecto?.responsables?.sst?.correo || "";
   const ma  = pr.proyecto?.responsables?.ma?.correo || "";
   const rse = pr.proyecto?.responsables?.rse?.correo || "";
+  const correoEmp = emp?.empresa?.datos?.correo || "";
+  const correoResp = pr.proyecto?.responsables?.proyecto?.correo || "";
   const carpeta = emp?.empresa?.datos?.carpeta || CARPETA_BASE;
-  const payload = {empresaClave:clave, proyectoId:pid, correoSST:sst, correoMA:ma, correoRSE:rse, carpeta};
-  const correos = [sst,ma,rse].filter(Boolean).join(",");
+  const payload = {empresaClave:clave, proyectoId:pid, correoSST:sst, correoMA:ma, correoRSE:rse, correoEmp, correoResp, carpeta};
+  const correos = [sst,ma,rse,correoResp,correoEmp].filter(Boolean).join(",");
   try{
     await enviarASheet(payload);
     // ... (el resto de la lógica de correo se mantiene igual)
@@ -3406,17 +3408,19 @@ async function notificarSiguiente(){
   const sst=pr.proyecto?.responsables?.sst?.correo||"";
   const ma=pr.proyecto?.responsables?.ma?.correo||"";
   const rse=pr.proyecto?.responsables?.rse?.correo||"";
+  const correoEmp=emp?.empresa?.datos?.correo||"";
+  const correoResp=pr.proyecto?.responsables?.proyecto?.correo||"";
   const carpeta=emp?.empresa?.datos?.carpeta||CARPETA_BASE;
   const estSST=estadoLSSST(pr.ls025), estMA=estadoLSMA(pr.ls025), estRSE=estadoLSRSE(pr.ls025);
   const estPer=estadoPersonal(pr.personal), estVeh=estadoVehiculos(pr.vehiculos);
-  const payload={empresaClave:clave,proyectoId:pid,correoSST:sst,correoMA:ma,correoRSE:rse,carpeta};
+  const payload={empresaClave:clave,proyectoId:pid,correoSST:sst,correoMA:ma,correoRSE:rse,correoEmp,correoResp,carpeta};
   if(!confirm("¿Notificar a SST/MA/RSE y registrar en la hoja?")) return;
   try{
     const r = await enviarASheet(payload);
     const empName = emp?.empresa?.datos?.empresa || emp?.empresa?.nombre || clave;
     const subject = `Carpeta para habilitar ${empName} ${pid}`;
     const body = `Usted está asignado para revisar la carpeta.\n\nFavor ingresar el siguiente link para su ingreso:\n\n`;
-    [sst,ma,rse].filter(Boolean).forEach((c,i)=>{
+    [sst,ma,rse,correoResp,correoEmp].filter(Boolean).forEach((c,i)=>{
       setTimeout(()=>enviarCorreoOutlook(c, subject, body), i*500);
     });
       registrarRevision(clave,pid,estSST,estMA,estRSE,estPer,estVeh,USUARIO.nombre,"Notificación a SST/MA/RSE",USUARIO.correo);
