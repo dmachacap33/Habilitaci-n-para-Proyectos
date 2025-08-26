@@ -3419,7 +3419,8 @@ function pdfYCorreo(clave,pid,opts={}){
     </body></html>`;
   w.document.write(html); w.document.close();
   const correoResp = opts.destinatarios || snap.proyecto?.responsables?.proyecto?.correo || (snap.empresa?.datos?.correo||"");
-  setTimeout(()=>{ window.open(`mailto:${correoResp}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`,'_blank'); }, 800);
+  // Envío automático mediante Power Automate
+  enviarCorreoOutlook(correoResp, asunto, cuerpo, html);
 }
 
 /* ================== Resumen / Export ================== */
