@@ -1612,6 +1612,22 @@ if (!conversation) {
       text: 'Por favor, cuéntame TODO sobre el proyecto: de qué se trata, dónde se hará (estación/DDV/terminal, ciudad/país), fechas y duración, actividades principales (p. ej., conducción, trabajos en caliente, izaje, alturas, espacio confinado, electricidad, arenado, hot tap, excavación), si habrá campamentos y rutas, cuántas personas y roles, si hay conductores u operadores de equipo pesado, si manipulan sustancias químicas o alimentos, si trabajarán fuera de Bolivia o con personal extranjero, vehículos/equipos previstos y cualquier tema ambiental (licencias, desmonte, áridos, ruido/emisiones).'
     }]
   }];
+} else {
+  let updated = false;
+  conversation = conversation.map(msg => {
+    if (msg.role === 'model') {
+      const raw = msg.parts.map(p => p.text).join('');
+      const parsed = extractResponseObject(raw);
+      if (parsed) {
+        updated = true;
+        return { role: 'model', parts: [{ text: JSON.stringify(parsed) }] };
+      }
+    }
+    return msg;
+  });
+  if (updated) {
+    saveConversation();
+  }
 }
 function saveConversation(){
   const max = 50;
@@ -3975,6 +3991,28 @@ function addMessage(text, sender, id = '') {
   chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
+// Extrae un objeto JSON válido desde un texto del modelo
+function extractResponseObject(text) {
+  let jsonString = text;
+  const codeBlockMatch = jsonString.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlockMatch) {
+    jsonString = codeBlockMatch[1];
+  } else {
+    const firstBrace = jsonString.indexOf('{');
+    const lastBrace = jsonString.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      jsonString = jsonString.substring(firstBrace, lastBrace + 1);
+    } else {
+      return null;
+    }
+  }
+  try {
+    return JSON.parse(jsonString);
+  } catch (e) {
+    return null;
+  }
+}
+
 // Reemplaza tu función askAI existente con esta
 async function askAI() {
   await ensureGeminiApiKey();
@@ -4024,42 +4062,29 @@ async function askAI() {
   }
 
   const data = await response.json();
-  const text = data.candidates[0].content.parts.map(p => p.text).join('');
-  conversation.push({ role: 'model', parts: [{ text }] });
+  const rawText = data.candidates[0].content.parts.map(p => p.text).join('');
+  let parsed = extractResponseObject(rawText);
+  if (!parsed) {
+    console.error("Fallo al parsear el JSON. Usando respuesta cruda como fallback. Respuesta:", rawText);
+    parsed = { mensaje: rawText, ids: null, cerrar: false };
+  }
+  conversation.push({ role: 'model', parts: [{ text: JSON.stringify(parsed) }] });
   saveConversation();
-
-  // --- LÓGICA DE EXTRACCIÓN MEJORADA ---
-  let jsonString = text;
-  
-  // Primero, intenta encontrar un bloque de código ```json
-  const codeBlockMatch = jsonString.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (codeBlockMatch) {
-    jsonString = codeBlockMatch[1];
-  } else {
-    // Si no hay bloque de código, busca el JSON anidado en el texto
-    const firstBrace = jsonString.indexOf('{');
-    const lastBrace = jsonString.lastIndexOf('}');
-    if (firstBrace !== -1 && lastBrace > firstBrace) {
-      jsonString = jsonString.substring(firstBrace, lastBrace + 1);
-    }
-  }
-
-  try {
-    // Intenta convertir el texto extraído en un objeto JSON
-    return JSON.parse(jsonString);
-  } catch (e) {
-    console.error("Fallo al parsear el JSON. Usando respuesta cruda como fallback. Respuesta:", text);
-    // Si todo falla, devuelve el texto original para no romper el chat.
-    // Esto es lo que causa el problema en tu imagen. Esta lógica lo previene.
-    return { mensaje: text, ids: null, cerrar: false };
-  }
+  return parsed;
 }
 
 function renderConversation(){
   chatMessages.innerHTML = '';
   conversation.forEach(msg => {
     const sender = msg.role === 'user' ? 'user' : 'ai';
-    addMessage(msg.parts.map(p=>p.text).join(''), sender);
+    let text = msg.parts.map(p=>p.text).join('');
+    if (sender === 'ai') {
+      const parsed = extractResponseObject(text);
+      if (parsed && parsed.mensaje) {
+        text = parsed.mensaje;
+      }
+    }
+    addMessage(text, sender);
   });
 }
 
