@@ -301,7 +301,16 @@ canvas{width:100%;height:300px;border-radius:8px}
     <div class="canvas-grid" style="margin-top:12px">
       <div class="canvas-card"><div class="small">Global A/P/O</div><canvas id="cv-donut" width="500" height="300"></canvas></div>
       <div class="canvas-card"><div class="small">Proyectos revisados por responsable</div><canvas id="cv-resp" width="500" height="300"></canvas></div>
-      <div class="canvas-card"><div class="small">Proyectos / mes (creados vs. aprobados)</div><canvas id="cv-series" width="500" height="300"></canvas></div>
+      <div class="canvas-card">
+        <div class="row" style="align-items:center;justify-content:space-between;">
+          <div id="cv-series-title" class="small">Proyectos / mes (creados vs. aprobados)</div>
+          <select id="series-scale" class="inp small" style="width:120px">
+            <option value="month">Por mes</option>
+            <option value="day">Por día</option>
+          </select>
+        </div>
+        <canvas id="cv-series" width="500" height="300"></canvas>
+      </div>
       <div class="canvas-card"><div class="small">Top 5 empresas con más “NO”</div><canvas id="cv-top5" width="500" height="300"></canvas></div>
       <div class="canvas-card"><div class="small">Estados globales</div><canvas id="cv-estados" width="500" height="300"></canvas></div>
       <div class="canvas-card"><div class="small">Proyectos por tipo</div><canvas id="cv-tipos" width="500" height="300"></canvas></div>
@@ -1577,6 +1586,15 @@ function ts(){
 function uid(){return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));}
 
 let DBCACHE = {}; // { [empresaClave]: { empresa:{...}, proyectos:{ [proyectoId]: {proyecto, ls025, personal, vehiculos, updatedAt} } } }
+const RESERVED_EMPRESAS = ["geminikeys","historial","sistema-1"]; // claves que no deben mostrarse en dashboard
+function empresaKeys(){
+  return Object.keys(DBCACHE).filter(k=>{
+    if(RESERVED_EMPRESAS.includes(k.toLowerCase())) return false;
+    const emp = DBCACHE[k];
+    const nombre = emp?.empresa?.datos?.empresa || emp?.empresa?.nombre;
+    return !!nombre;
+  });
+}
 let CURRENT = JSON.parse(localStorage.getItem("currentV4")||"{}"); // { empresaClave, proyectoId }
 let USERS = JSON.parse(localStorage.getItem("usuariosApp")||"{}") || {};
 let USUARIO = JSON.parse(localStorage.getItem("usuarioActual") || sessionStorage.getItem("usuarioActual") || "null") || {nombre:"", correo:"", codigo:"", admin:false};
@@ -1732,7 +1750,7 @@ function populatePersonalList(){
 function refreshEmpresaList(){
   const dl=document.getElementById("empresas-list");
   if(!dl) return;
-  const empresas = Object.keys(DBCACHE).filter(clave=>{
+  const empresas = empresaKeys().filter(clave=>{
     const emp=DBCACHE[clave];
     const n=emp?.empresa?.datos?.empresa || emp?.empresa?.nombre;
     if(!n) return false;
@@ -1782,15 +1800,17 @@ function esResponsableEnProyecto(pr, correo){
 
 function tieneAsignacionResponsable(correo){
   if(!correo) return false;
-  return Object.values(DBCACHE).some(emp=>
-    Object.values(emp.proyectos||{}).some(pr=> esResponsableEnProyecto(pr, correo))
-  );
+  return empresaKeys().some(k=>{
+    const emp=DBCACHE[k];
+    return Object.values(emp.proyectos||{}).some(pr=> esResponsableEnProyecto(pr, correo));
+  });
 }
 
 function rolesUsuario(correo){
   const roles = new Set();
   if(!correo) return roles;
-  Object.values(DBCACHE).forEach(emp=>{
+  empresaKeys().forEach(k=>{
+    const emp=DBCACHE[k];
     Object.values(emp.proyectos||{}).forEach(pr=>{
       const resp = pr.proyecto?.responsables || {};
       if(resp.sst?.correo===correo) roles.add('SST');
@@ -2315,7 +2335,7 @@ function renderDashboard(){
   const fTipo = $("#filtro-tipo").value;
   const fEstado = $("#filtro-estado").value;
 
-  const empresas = Object.keys(DBCACHE).filter(clave=>{
+  const empresas = empresaKeys().filter(clave=>{
     const emp = DBCACHE[clave];
     const nombre = emp?.empresa?.datos?.empresa || emp?.empresa?.nombre;
     if(!nombre) return false;
@@ -2413,7 +2433,8 @@ function renderYPFB(){
     $("#ypfb-rev").innerHTML = "";
     return;
   }
-  Object.entries(DBCACHE).forEach(([clave,emp])=>{
+  empresaKeys().forEach(clave=>{
+    const emp=DBCACHE[clave];
     Object.entries(emp.proyectos||{}).forEach(([pid,pr])=>{
       const resp=pr.proyecto?.responsables||{};
       let rol=null;
@@ -2436,7 +2457,8 @@ function renderResponsable(){
   if(!cont) return;
   const correo = USUARIO.correo;
   const cards = [];
-  Object.entries(DBCACHE).forEach(([clave,emp])=>{
+  empresaKeys().forEach(clave=>{
+    const emp=DBCACHE[clave];
     const nombreEmp = emp.empresa?.datos?.empresa || emp.empresa?.nombre || clave;
     Object.entries(emp.proyectos||{}).forEach(([pid,pr])=>{
       if(esResponsableEnProyecto(pr, correo)){
@@ -2453,6 +2475,7 @@ function toggleVista(){ const onCards = $("#cards").style.display!=="none"; $("#
 $("#search").addEventListener("input", renderDashboard);
 $("#filtro-tipo").addEventListener("change", renderDashboard);
 $("#filtro-estado").addEventListener("change", renderDashboard);
+$("#series-scale").addEventListener("change", drawAllCharts);
 
 /* ================== Gráficos Canvas (sin librerías) ================== */
 function drawDonut(canvas, aprob, parcial, observ){
@@ -2478,24 +2501,79 @@ function drawRespChart(canvas, labels, values){
     ctx.fillText(`${l} — ${values[i]}`, pad+4, y);
   });
 }
-function drawSeries(canvas, months, createdArr, approvedArr){
+
+function getSeriesData(scale){
+  const now=new Date();
+  if(scale==="day"){
+    const labels=[], createdArr=[], approvedArr=[];
+    for(let i=6;i>=0;i--){
+      const d=new Date(now.getFullYear(), now.getMonth(), now.getDate()-i);
+      labels.push(d.toLocaleDateString(undefined,{day:"numeric",month:"short"}));
+      createdArr.push(0); approvedArr.push(0);
+    }
+    empresaKeys().forEach(k=>{
+      const emp=DBCACHE[k];
+      Object.values(emp.proyectos||{}).forEach(pr=>{
+        const d=pr.proyecto?.creadoEn?new Date(pr.proyecto.creadoEn):new Date();
+        const diff=Math.floor((now-d)/(24*3600*1000));
+        if(diff>=0 && diff<7){
+          createdArr[6-diff]++;
+          if(estadoProyecto(pr)==="APROBADO") approvedArr[6-diff]++;
+        }
+      });
+    });
+    return {labels, createdArr, approvedArr};
+  }else{
+    const labels=[]; for(let i=7;i>=0;i--){const d=new Date(now.getFullYear(), now.getMonth()-i,1); labels.push(d.toLocaleString(undefined,{month:"short"}));}
+    const createdArr=new Array(8).fill(0), approvedArr=new Array(8).fill(0);
+    empresaKeys().forEach(k=>{
+      const emp=DBCACHE[k];
+      Object.values(emp.proyectos||{}).forEach(pr=>{
+        const d=pr.proyecto?.creadoEn?new Date(pr.proyecto.creadoEn):new Date();
+        const idx=7-((now.getFullYear()*12+now.getMonth())-(d.getFullYear()*12+d.getMonth()));
+        if(idx>=0 && idx<8){
+          createdArr[idx]++;
+          if(estadoProyecto(pr)==="APROBADO") approvedArr[idx]++;
+        }
+      });
+    });
+    return {labels, createdArr, approvedArr};
+  }
+}
+function drawSeries(canvas, labels, createdArr, approvedArr){
   const ctx=canvas.getContext("2d"); const W=canvas.width, H=canvas.height; ctx.clearRect(0,0,W,H);
   const pad=40; const max = Math.max(1, ...createdArr, ...approvedArr);
-  const stepX = (W-pad*2)/Math.max(1,(months.length-1));
+  const stepX = (W-pad*2)/Math.max(1,(labels.length-1));
   // axes
   ctx.strokeStyle="#334155"; ctx.beginPath(); ctx.moveTo(pad, H-pad); ctx.lineTo(W-pad, H-pad); ctx.moveTo(pad, pad); ctx.lineTo(pad, H-pad); ctx.stroke();
-  function drawLine(arr){
+  // Y ticks
+  const stepY = Math.ceil(max/5);
+  ctx.fillStyle="#1e293b"; ctx.font="12px system-ui"; ctx.textAlign="right"; ctx.textBaseline="middle";
+  for(let yVal=0; yVal<=max; yVal+=stepY){
+    const y=(H-pad) - ( (H-pad*2)*(yVal/max) );
+    ctx.strokeStyle="#e2e8f0"; ctx.beginPath(); ctx.moveTo(pad-4,y); ctx.lineTo(W-pad,y); ctx.stroke();
+    ctx.fillText(String(yVal), pad-8, y);
+  }
+  function drawLine(arr, color){
     ctx.beginPath();
     arr.forEach((v,i)=>{
       const x = pad + i*stepX; const y = (H-pad) - ( (H-pad*2)*(v/max) );
       if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
     });
-    ctx.stroke();
+    ctx.strokeStyle=color; ctx.stroke();
   }
-  ctx.strokeStyle="#93c5fd"; drawLine(createdArr);
-  ctx.strokeStyle="#86efac"; drawLine(approvedArr);
+  drawLine(createdArr, "#3b82f6");
+  drawLine(approvedArr, "#22c55e");
   ctx.fillStyle="#1e293b"; ctx.font="14px system-ui"; ctx.textAlign="center";
-  months.forEach((m,i)=>{ const x=pad + i*stepX; ctx.fillText(m, x, H-pad+16); });
+  labels.forEach((m,i)=>{ const x=pad + i*stepX; ctx.fillText(m, x, H-pad+16); });
+  // legend
+  ctx.textAlign="left"; ctx.font="12px system-ui";
+  ctx.fillStyle="#3b82f6"; ctx.fillRect(pad, pad-30, 12, 12);
+  ctx.fillStyle="#1e293b"; ctx.fillText("Creados", pad+16, pad-20);
+  ctx.fillStyle="#22c55e"; ctx.fillRect(pad+80, pad-30, 12, 12);
+  ctx.fillStyle="#1e293b"; ctx.fillText("Aprobados", pad+96, pad-20);
+  // Y axis label
+  ctx.save(); ctx.rotate(-Math.PI/2); ctx.textAlign="center"; ctx.fillText("Proyectos", -H/2, pad-30); ctx.restore();
 }
 function drawTop5(canvas, labels, values){
   const ctx=canvas.getContext("2d"); const W=canvas.width, H=canvas.height; ctx.clearRect(0,0,W,H);
@@ -2549,7 +2627,8 @@ function drawTopEmp(canvas, labels, values){
 function drawAllCharts(){
   // Donut
   let aprob=0, parcial=0, observ=0;
-  Object.values(DBCACHE).forEach(emp=>{
+  empresaKeys().forEach(k=>{
+    const emp=DBCACHE[k];
     Object.values(emp.proyectos||{}).forEach(pr=>{
       const e = estadoProyecto(pr);
       if(e==="APROBADO") aprob++; else if(e==="PARCIAL") parcial++; else if(e==="OBSERVADO") observ++;
@@ -2560,7 +2639,8 @@ function drawAllCharts(){
 
   // Proyectos revisados por responsable
   const respMap = new Map();
-  Object.values(DBCACHE).forEach(emp=>{
+  empresaKeys().forEach(k=>{
+    const emp=DBCACHE[k];
     Object.values(emp.proyectos||{}).forEach(pr=>{
       const seen = new Set();
       (pr.historial||[]).forEach(h=>{ if(h.responsable) seen.add(h.responsable); });
@@ -2571,23 +2651,15 @@ function drawAllCharts(){
   const respValues = respLabels.map(r=>respMap.get(r));
   const c2=$("#cv-resp"); if(c2) drawRespChart(c2, respLabels, respValues);
 
-  // Series por mes (últimos 8)
-  const months=[]; const now=new Date();
-  for(let i=7;i>=0;i--){const d=new Date(now.getFullYear(), now.getMonth()-i, 1); months.push(d.toLocaleString(undefined,{month:"short"}));}
-  const createdArr=new Array(8).fill(0), approvedArr=new Array(8).fill(0);
-  Object.values(DBCACHE).forEach(emp=>{
-    Object.values(emp.proyectos||{}).forEach(pr=>{
-      const d = pr.proyecto?.creadoEn ? new Date(pr.proyecto.creadoEn) : new Date();
-      const idx = 7 - ( (now.getFullYear()*12+now.getMonth()) - (d.getFullYear()*12+d.getMonth()) );
-      if(idx>=0 && idx<8) createdArr[idx]++;
-      if(estadoProyecto(pr)==="APROBADO"){ if(idx>=0 && idx<8) approvedArr[idx]++; }
-    });
-  });
-  const c3=$("#cv-series"); if(c3) drawSeries(c3, months, createdArr, approvedArr);
+  // Series creados vs aprobados
+  const scale=$("#series-scale")?$("#series-scale").value:"month";
+  const {labels, createdArr, approvedArr}=getSeriesData(scale);
+  const c3=$("#cv-series"); if(c3) drawSeries(c3, labels, createdArr, approvedArr);
+  const title=$("#cv-series-title"); if(title) title.textContent = scale==="day"?"Proyectos / día (creados vs. aprobados)":"Proyectos / mes (creados vs. aprobados)";
 
   // Top 5 empresas con más “N”
   const counts=[];
-  Object.keys(DBCACHE).forEach(clave=>{
+  empresaKeys().forEach(clave=>{
     let n=0;
     const emp=DBCACHE[clave];
     Object.values(emp.proyectos||{}).forEach(pr=>{
@@ -2607,7 +2679,8 @@ function drawAllCharts(){
 
   // Proyectos por tipo
   const typeCounts={CI:0,HP:0,DB:0,HV:0};
-  Object.values(DBCACHE).forEach(emp=>{
+  empresaKeys().forEach(k=>{
+    const emp=DBCACHE[k];
     Object.values(emp.proyectos||{}).forEach(pr=>{
       (pr.proyecto?.tipos||[]).forEach(t=>{ if(typeCounts[t]!=null) typeCounts[t]++; });
     });
@@ -2615,7 +2688,7 @@ function drawAllCharts(){
   const c6=$("#cv-tipos"); if(c6) drawTypeChart(c6, Object.keys(typeCounts), Object.values(typeCounts));
 
   // Top 5 empresas con más proyectos
-  const projCounts=Object.keys(DBCACHE).map(clave=>{
+  const projCounts=empresaKeys().map(clave=>{
     const count=Object.keys(DBCACHE[clave].proyectos||{}).length;
     const name=DBCACHE[clave].empresa?.datos?.empresa || DBCACHE[clave].empresa?.nombre || clave;
     return {name,count};
@@ -3678,10 +3751,8 @@ async function notificarSiguiente(){
 /* ================== Selectores de empresa/proyecto en paneles ================== */
 function refreshSelectors(selEmpresaId, selProyectoId){
   const selEmp = $(selEmpresaId), selProy = $(selProyectoId);
-  const empresas = Object.keys(DBCACHE).filter(clave=>{
+  const empresas = empresaKeys().filter(clave=>{
     const emp=DBCACHE[clave];
-    const n=emp?.empresa?.datos?.empresa || emp?.empresa?.nombre;
-    if(!n) return false;
     if(ES_RESPONSABLE && !USUARIO.admin){
       return Object.values(emp.proyectos||{}).some(pr=> esResponsableEnProyecto(pr, USUARIO.correo));
     }
