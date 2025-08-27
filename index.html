@@ -3908,7 +3908,6 @@ async function handleUserMessage() {
   const userQuery = chatInput.value.trim();
   if (!userQuery) return;
 
-  // Muestra el mensaje del usuario en la pantalla
   addMessage(userQuery, 'user');
   chatInput.value = '';
   conversation.push({ role: 'user', parts: [{ text: userQuery }] });
@@ -3916,41 +3915,49 @@ async function handleUserMessage() {
   addMessage('Pensando...', 'ai', 'loading-message');
 
   try {
-    const response = await askAI();
+    // La función askAI ahora devuelve el objeto JSON directamente
+    const responseJson = await askAI();
+    
+    // Eliminamos el mensaje "Pensando..."
     const loadingMessage = document.getElementById('loading-message');
-    loadingMessage.textContent = response.mensaje;
-    loadingMessage.removeAttribute('id');
-    if (response.ids) {
-      const idsUpper = response.ids.map(id => id.toUpperCase());
+    if (loadingMessage) {
+      loadingMessage.remove();
+    }
+
+    // Mostramos solo el mensaje amigable al usuario
+    if (responseJson.mensaje) {
+      addMessage(responseJson.mensaje, 'ai');
+    }
+
+    // Procesamos los IDs internamente
+    if (responseJson.ids && responseJson.ids.length > 0) {
+      const idsUpper = responseJson.ids.map(id => id.toUpperCase());
+       // Aseguramos que los ítems de MA obligatorios estén si aplica
       ['L067','L068','L069','L082'].forEach(id => { if (!idsUpper.includes(id)) idsUpper.push(id); });
       ls025FilteredIds = new Set(idsUpper);
+    }
+
+    // Si el bot confirma que está listo, filtramos el formulario
+    if (responseJson.cerrar && ls025FilteredIds) {
+      // Damos una confirmación final y aplicamos el filtro
+      addMessage("Perfecto, aplicando el filtro ahora.", 'ai');
       buildLs025();
+
+      // Opcional: Cerrar el chat después de filtrar
+      setTimeout(() => chatContainer.classList.remove('visible'), 2000); 
     }
-    if (response.proyecto && !currentProyecto) {
-      currentProyecto = response.proyecto;
+
+    if (responseJson.proyecto && !currentProyecto) {
+        currentProyecto = responseJson.proyecto;
     }
-    if (response.cerrar) {
-      const entry = {
-        proyecto: response.proyecto || currentProyecto || '',
-        alcance: response.alcance || '',
-        tipoContrato: response.tipoContrato || '',
-        personal: response.personal || '',
-        ids: Array.from(ls025FilteredIds || []),
-        timestamp: nowIso()
-      };
-      guardarHistorialRegistro(entry);
-      const k = (entry.proyecto || '').toLowerCase();
-      if(k){
-        if(!HISTORIAL[k]) HISTORIAL[k] = [];
-        HISTORIAL[k].push(entry);
-      }
-      setTimeout(() => chatContainer.classList.remove('visible'), 500);
-    }
+
   } catch (error) {
-    console.error("Error al contactar a la IA:", error);
+    console.error("Error al procesar la respuesta de la IA:", error);
     const loadingMessage = document.getElementById('loading-message');
-    loadingMessage.textContent = "Lo siento, hubo un error al conectar con el asistente.";
-    loadingMessage.removeAttribute('id');
+    if(loadingMessage){
+        loadingMessage.textContent = "Lo siento, hubo un error al conectar con el asistente.";
+        loadingMessage.removeAttribute('id');
+    }
   }
   saveConversation();
 }
@@ -3982,25 +3989,16 @@ async function askAI() {
     historialPrompt = '\nHistorial previo para proyectos similares (' + currentProyecto + '):\n' +
       historial.map(h => `- Alcance: ${h.alcance}; TipoContrato: ${h.tipoContrato}; Personal: ${h.personal}; LS025: ${(h.ids||[]).join(',')}`).join('\n');
   }
-  const systemInstruction = `Eres "iDavid", un asistente experto en la habilitación de proyectos bajo la normativa LS.025. Tu objetivo es guiar al usuario a través de un proceso conversacional para identificar con precisión todos los ítems del formulario LS.025 que aplican a su proyecto.
+ const systemInstruction = `Eres "iDavid", un asistente experto en la habilitación de proyectos bajo la normativa LS.025. Tu objetivo es guiar al usuario a través de un proceso conversacional para identificar con precisión todos los ítems del formulario LS.025 que aplican a su proyecto.
 
 **Tu Misión:**
 
-1.  **Comprensión Holística del Proyecto:** Inicia la conversación con una pregunta abierta y amigable para que el usuario describa la naturaleza general de su proyecto.
-2.  **Identificación de Requisitos Obligatorios:** Sin importar la descripción, siempre debes pre-seleccionar los ítems que son **mandatorios** para CUALQUIER proyecto.
-3.  **Diálogo Interactivo y Guiado:** En lugar de pedir toda la información de golpe, haz preguntas específicas y en secuencia lógica para determinar la aplicabilidad de otros ítems. Basa tus preguntas en las respuestas del usuario y en las categorías del formulario LS.025.
-4.  **Categorización Clara:** A medida que identificas los ítems, agrúpalos en las categorías correctas: **Requisitos Generales, Seguridad y Salud (SST), Medio Ambiente (MA), y Responsabilidad Social Empresarial (RSE).**
-5.  **Transparencia y Justificación:** Justifica brevemente por qué consideras que un ítem aplica, basándote en la información que te ha proporcionado el usuario.
-6.  **Confirmación Final:** Una vez que hayas cubierto todas las áreas, presenta un resumen final de todos los ítems aplicables, categorizados, y pide al usuario su confirmación antes de finalizar el proceso.
-7.  **Formato de Respuesta JSON:** Tu respuesta final DEBE ser un objeto JSON con la siguiente estructura: \`{"mensaje": "Resumen final...", "ids": ["L001", "L002", ...], "cerrar": true}\`. Mientras la conversación esté en curso, \`cerrar\` debe ser \`false\` y \`ids\` puede ser \`null\` o una lista parcial.
-
-**Flujo de la Conversación (Ejemplo):**
-
-* **iDavid (inicio):** "¡Hola! Soy iDavid, tu asistente para la habilitación de proyectos. Para comenzar, cuéntame un poco sobre tu proyecto. ¿De qué se trata y cuáles son las actividades principales?"
-* **Usuario:** "Es un proyecto de mantenimiento de un gasoducto. Haremos excavaciones, soldadura y trabajos en altura."
-* **iDavid:** "Entendido. Basado en lo que me dices, y considerando los requisitos obligatorios, ya he identificado algunos ítems de **SST** como 'Evaluación de Riesgos de SSO' y 'Procedimientos específicos'. Ahora, para afinar la selección, hablemos del personal. ¿El equipo trabajará por más de 90 días?"
-* **... (la conversación continúa, cubriendo cada categoría) ...**
-* **iDavid (final):** "¡Perfecto! Hemos completado el análisis. Aquí tienes el resumen de los ítems LS.025 que aplican a tu proyecto de mantenimiento de gasoducto... ¿Estás de acuerdo con esta selección para proceder a filtrar el formulario?"
+1.  **Conversación Limpia y Natural:** Mantén los mensajes cortos, amigables y libres de jerga técnica. **Nunca muestres el JSON o listas de IDs en el chat.** Toda esa información se procesa internamente.
+2.  **Inicio Amplio:** Comienza siempre con una pregunta general para entender la visión global del proyecto.
+3.  **Diálogo Guiado:** Realiza preguntas específicas y secuenciales para aclarar los detalles del proyecto (personal, actividades, MA, RSE, etc.).
+4.  **Justificación Bajo Demanda:** Solo explica el porqué de un ítem si el usuario te lo pregunta directamente. Sé conciso en tu explicación.
+5.  **Confirmación Final sin Listas:** Cuando hayas recopilado toda la información, no listes los IDs. En su lugar, confirma que estás listo para filtrar. Por ejemplo: "¡Listo! Ya he identificado los requisitos. ¿Confirmo para filtrar el formulario?".
+6.  **Formato de Respuesta JSON (Interno):** Tu respuesta final DEBE ser un objeto JSON puro. El campo "mensaje" es para el usuario y el campo "ids" es para el sistema. La estructura es: \`{"mensaje": "Tu mensaje para el usuario.", "ids": ["L001", ...], "cerrar": boolean}\`. Durante la conversación, \`cerrar\` es \`false\`. Solo es \`true\` en el mensaje final de confirmación.
 
 **Catálogo LS.025 para tu referencia:**
 \${ls025Context}\${historialPrompt}`;
