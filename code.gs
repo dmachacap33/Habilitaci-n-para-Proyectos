@@ -222,12 +222,15 @@ function sendActionEmail(data) {
     };
 
     // Adjuntar PDF generado a partir del HTML si está disponible.
+    // (Deshabilitado: conservar para uso futuro)
+    /*
     if (data.pdfHtml && data.accion !== 'Devolución') {
       const pdfBlob = Utilities.newBlob(data.pdfHtml, 'text/html', 'reporte.html')
         .getAs('application/pdf')
         .setName(`reporte_${data.empresaClave || ''}_${data.proyectoId || ''}.pdf`);
       options.attachments = [pdfBlob];
     }
+    */
 
     MailApp.sendEmail(options);
 

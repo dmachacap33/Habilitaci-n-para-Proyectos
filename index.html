@@ -3542,7 +3542,7 @@ async function pdfYCorreo(clave,pid,opts={}){
       correoResp: snap.proyecto?.responsables?.proyecto?.correo || '',
       asunto,
       cuerpo,
-      pdfHtml: html
+      // pdfHtml: html, // (Deshabilitado: adjuntar PDF en el futuro)
     }
   };
   try {
