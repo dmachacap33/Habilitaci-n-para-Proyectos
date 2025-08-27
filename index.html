@@ -1613,6 +1613,38 @@ function persistDB(){
   }
 }
 
+function persistPersonal(){
+  const clave=document.querySelector("#per-empresaSel")?.value;
+  const pid=document.querySelector("#per-proyectoSel")?.value;
+  if(!clave || !pid){ persistDB(); return; }
+  const pr=ensureProyecto(clave,pid);
+  if(database){
+    database.ref(`${clave}/proyectos/${pid}/personal`).set(pr.personal)
+      .catch(error=>{
+        console.error("Error al guardar datos en Firebase:", error);
+        alert("Error: No se pudieron guardar los cambios en la nube.");
+      });
+  }
+  localStorage.setItem("dbCacheV4", JSON.stringify(DBCACHE));
+  const tag=document.getElementById("db-json"); if(tag) tag.textContent=JSON.stringify(DBCACHE);
+}
+
+function persistVehiculos(){
+  const clave=document.querySelector("#veh-empresaSel")?.value;
+  const pid=document.querySelector("#veh-proyectoSel")?.value;
+  if(!clave || !pid){ persistDB(); return; }
+  const pr=ensureProyecto(clave,pid);
+  if(database){
+    database.ref(`${clave}/proyectos/${pid}/vehiculos`).set(pr.vehiculos)
+      .catch(error=>{
+        console.error("Error al guardar datos en Firebase:", error);
+        alert("Error: No se pudieron guardar los cambios en la nube.");
+      });
+  }
+  localStorage.setItem("dbCacheV4", JSON.stringify(DBCACHE));
+  const tag=document.getElementById("db-json"); if(tag) tag.textContent=JSON.stringify(DBCACHE);
+}
+
 function cargarUsuariosDesdeFirebase(){
   if(!database){
     USERS = JSON.parse(localStorage.getItem("usuariosApp")||"{}") || {};
@@ -2918,7 +2950,7 @@ function agregarPersona(){
   logProyecto(clave,pid);
 
   $("#per-nombre").value=$("#per-cargo").value=$("#per-id").value="";
-  persistDB();
+  persistPersonal();
   renderTablaPersonal();
   renderDashboard();
 }
@@ -2968,7 +3000,7 @@ function eliminarPersona(idx){
   const clave=$("#per-empresaSel").value, pid=$("#per-proyectoSel").value;
   logProyecto(clave,pid);
 
-  persistDB();
+  persistPersonal();
 }
 function editarPersona(idx){
   if(READONLY) return;
@@ -3023,14 +3055,14 @@ function editarPersona(idx){
     if(e.target.classList.contains("pf-req-com")){
       if(!p.requisitosObs) p.requisitosObs={};
       p.requisitosObs[e.target.dataset.code]=e.target.value.trim();
-      persistDB();
+      persistPersonal();
       return;
     }
     if(e.target.id==="pf-id") p.personaId=e.target.value.trim();
     else if(e.target.id==="pf-nombre") p.nombre=e.target.value.trim();
     else if(e.target.id==="pf-cargo") p.cargo=e.target.value.trim();
     else if(e.target.id==="pf-com") p.comentarios=e.target.value.trim();
-    persistDB(); renderTablaPersonal(); renderDashboard();
+    persistPersonal(); renderTablaPersonal(); renderDashboard();
   });
   box.addEventListener("change", e=>{
     if(e.target.classList.contains("pf-req-com")){
@@ -3047,7 +3079,7 @@ function editarPersona(idx){
         com.style.display='none';
       }
       updateGuiasVisibility();
-      persistDB();
+      persistPersonal();
       renderTablaPersonal();
       renderDashboard();
     }
@@ -3067,7 +3099,7 @@ function agregarPerfilGuia(){
   if(p.guiasMedicas.find(g=>g.perfil===perfil)){ alert("Ese perfil ya existe"); return; }
   const items = Object.fromEntries(GUIAS_PERFILES[perfil].map(k=>[k,""]));
   p.guiasMedicas.push({perfil, items});
-  persistDB(); renderGuiasPersonales(); renderTablaPersonal(); renderDashboard();
+  persistPersonal(); renderGuiasPersonales(); renderTablaPersonal(); renderDashboard();
 }
 function renderGuiasPersonales(){
   const pr = proyectoActualPersonal(); const p = pr.personal[editingPersonaIndex];
@@ -3092,12 +3124,12 @@ function renderGuiasPersonales(){
     if(e.target.tagName==="SELECT" && e.target.dataset.gix!==undefined){
       const gix=+e.target.dataset.gix, code=e.target.dataset.code, v=e.target.value;
       const pr = proyectoActualPersonal(); pr.personal[editingPersonaIndex].guiasMedicas[gix].items[code]=v;
-      persistDB(); renderTablaPersonal(); renderDashboard();
+      persistPersonal(); renderTablaPersonal(); renderDashboard();
     }
   });
 }
 function borrarGuia(idx){
-  const pr = proyectoActualPersonal(); pr.personal[editingPersonaIndex].guiasMedicas.splice(idx,1); persistDB(); renderGuiasPersonales(); renderTablaPersonal(); renderDashboard();
+  const pr = proyectoActualPersonal(); pr.personal[editingPersonaIndex].guiasMedicas.splice(idx,1); persistPersonal(); renderGuiasPersonales(); renderTablaPersonal(); renderDashboard();
 }
 function cerrarModal(id){ $("#"+id).style.display="none"; }
 
@@ -3120,7 +3152,7 @@ function agregarVehiculo(){
   logProyecto(clave,pid);
 
   $("#veh-placa").value=$("#veh-marca").value=$("#veh-tipo").value=$("#veh-id").value="";
-  persistDB();
+  persistVehiculos();
   renderTablaVehiculos();
   renderDashboard();
 }
@@ -3150,7 +3182,7 @@ function eliminarVehiculo(idx){
   const clave=$("#veh-empresaSel").value, pid=$("#veh-proyectoSel").value;
   logProyecto(clave,pid);
 
-  persistDB();
+  persistVehiculos();
 }
 function editarVehiculo(idx){
   if(READONLY) return;
@@ -3192,7 +3224,7 @@ function editarVehiculo(idx){
     if(e.target.classList.contains("vf-req-com")){
       if(!v.reqComentarios) v.reqComentarios={};
       v.reqComentarios[e.target.dataset.code]=e.target.value.trim();
-      persistDB();
+      persistVehiculos();
       return;
     }
     if(e.target.id==="vf-id") v.vehiculoId=e.target.value.trim();
@@ -3200,7 +3232,7 @@ function editarVehiculo(idx){
     else if(e.target.id==="vf-marca") v.marca=e.target.value.trim();
     else if(e.target.id==="vf-tipo") v.tipo=e.target.value.trim();
     else if(e.target.id==="vf-com") v.comentarios=e.target.value.trim();
-    persistDB(); renderTablaVehiculos(); renderDashboard();
+    persistVehiculos(); renderTablaVehiculos(); renderDashboard();
   });
   box.addEventListener("change", e=>{
     if(e.target.classList.contains("vf-req-com")){
@@ -3216,7 +3248,7 @@ function editarVehiculo(idx){
       }else{
         com.style.display='none';
       }
-      persistDB();
+      persistVehiculos();
       renderTablaVehiculos();
       renderDashboard();
     }
