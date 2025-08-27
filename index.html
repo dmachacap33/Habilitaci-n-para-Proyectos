@@ -2902,10 +2902,10 @@ function actualizarLS025(reqId, valor, comentario, clave, pid){
   }
 
   const txt = comentario.trim();
-  if(valor==="N"){
+  if(valor==="N" || valor==="S"){
     arr.push({
       reqId,
-      valor:"N",
+      valor,
       comentario:txt,
       autor:"",
       modificadoEn:nowIso()
@@ -2919,11 +2919,28 @@ function autoLs025FromPersonal(code){
   const clave=$("#per-empresaSel").value;
   const pid=$("#per-proyectoSel").value;
   const pr = proyectoActualPersonal();
-  const p = pr.personal[editingPersonaIndex] || {};
-  const val = (p.requisitos||{})[code] || "";
-  const obs = (p.requisitosObs||{})[code] || "";
-  const comentario = obs ? `${p.nombre}: ${obs}` : `${p.nombre||""}`;
-  actualizarLS025(reqId, val, comentario, clave, pid);
+  const personas = pr.personal || [];
+  let allS = personas.length>0;
+  let anyN = false;
+  const comentarios=[];
+  personas.forEach(p=>{
+    const val = (p.requisitos||{})[code] || "";
+    const obs = (p.requisitosObs||{})[code] || "";
+    if(val==="N"){
+      anyN = true;
+      const com = obs ? `${p.nombre}: ${obs}` : `${p.nombre||""}`;
+      comentarios.push(com.trim());
+    }
+    if(val!=="S") allS=false;
+  });
+
+  if(anyN){
+    actualizarLS025(reqId, "N", comentarios.join("; "), clave, pid);
+  }else if(allS){
+    actualizarLS025(reqId, "S", "", clave, pid);
+  }else{
+    actualizarLS025(reqId, "", "", clave, pid);
+  }
 }
 
 function autoLs025FromVeh(code){
