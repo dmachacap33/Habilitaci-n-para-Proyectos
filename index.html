@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="theme-color" content="#0055a5"/>
+<link rel="manifest" href="manifest.json"/>
 <title>CRM de Habilitación - YPFB Transporte (v4)</title>
 <link rel="stylesheet" href="https://unpkg.com/intro.js@7.1.0/minified/introjs.min.css"/>
 <style>
@@ -214,6 +216,24 @@ canvas{width:100%;height:300px;border-radius:8px}
   background:#0960bd;
 }
 .introjs-bullets li a.active{background:#fff}
+@media (max-width:768px){
+  .sidebar{position:static;width:100%;height:auto;flex-direction:row;border-right:none;border-bottom:1px solid var(--border);}
+  .sidebar .tab span{display:none;}
+  .sidebar:hover{width:100%;}
+  .sidebar:hover .tab span{display:none;}
+  .main{margin-left:0;width:100%;}
+  .grid{grid-template-columns:1fr;}
+  .col-12,.col-8,.col-6,.col-4,.col-3{grid-column:span 1;}
+}
+@media (min-width:769px) and (max-width:1024px){
+  .grid{grid-template-columns:repeat(8,1fr);}
+  .col-12{grid-column:span 8;}
+  .col-8{grid-column:span 8;}
+  .col-6{grid-column:span 4;}
+  .col-4{grid-column:span 4;}
+  .col-3{grid-column:span 2;}
+}
+
 </style>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
@@ -3531,6 +3551,24 @@ async function pdfYCorreo(clave,pid,opts={}){
     .aprob-banner.ok{border-color:#0a0;color:#0a0}
     .aprob-banner.err{border-color:#a00;color:#a00}
     @media print { .no-print{display:none} table{width:100%;border-collapse:collapse} th,td{border:1px solid #000;padding:4px 6px} }
+@media (max-width:768px){
+  .sidebar{position:static;width:100%;height:auto;flex-direction:row;border-right:none;border-bottom:1px solid var(--border);}
+  .sidebar .tab span{display:none;}
+  .sidebar:hover{width:100%;}
+  .sidebar:hover .tab span{display:none;}
+  .main{margin-left:0;width:100%;}
+  .grid{grid-template-columns:1fr;}
+  .col-12,.col-8,.col-6,.col-4,.col-3{grid-column:span 1;}
+}
+@media (min-width:769px) and (max-width:1024px){
+  .grid{grid-template-columns:repeat(8,1fr);}
+  .col-12{grid-column:span 8;}
+  .col-8{grid-column:span 8;}
+  .col-6{grid-column:span 4;}
+  .col-4{grid-column:span 4;}
+  .col-3{grid-column:span 2;}
+}
+
     </style></head>
   <body>
     <h2>YPFB Transporte — Reporte de Habilitación</h2>
@@ -4296,6 +4334,7 @@ function init(){
     startTourOnce();
 }
 init();
+if("serviceWorker" in navigator){navigator.serviceWorker.register("service-worker.js");}
 </script>
 </body>
 </html>
