@@ -2949,11 +2949,28 @@ function autoLs025FromVeh(code){
   const clave=$("#veh-empresaSel").value;
   const pid=$("#veh-proyectoSel").value;
   const pr = proyectoActualVeh();
-  const v = pr.vehiculos[editingVehIndex] || {};
-  const val = (v.requisitos||{})[code] || "";
-  const obs = (v.reqComentarios||{})[code] || "";
-  const comentario = obs ? `${v.vehiculoId}: ${obs}` : `${v.vehiculoId||""}`;
-  actualizarLS025(reqId, val, comentario, clave, pid);
+  const vehiculos = pr.vehiculos || [];
+  let allS = vehiculos.length>0;
+  let anyN = false;
+  const comentarios=[];
+  vehiculos.forEach(v=>{
+    const val = (v.requisitos||{})[code] || "";
+    const obs = (v.reqComentarios||{})[code] || "";
+    if(val==="N"){
+      anyN = true;
+      const com = obs ? `${v.vehiculoId}: ${obs}` : `${v.vehiculoId||""}`;
+      comentarios.push(com.trim());
+    }
+    if(val!=="S") allS=false;
+  });
+
+  if(anyN){
+    actualizarLS025(reqId, "N", comentarios.join("; "), clave, pid);
+  }else if(allS){
+    actualizarLS025(reqId, "S", "", clave, pid);
+  }else{
+    actualizarLS025(reqId, "", "", clave, pid);
+  }
 }
 
 function syncLs025FromPersona(){
