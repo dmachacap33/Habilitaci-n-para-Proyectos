@@ -3665,13 +3665,18 @@ function registrarAccion(){
     const correoEmp=emp?.empresa?.datos?.correo||"";
     const correoResp=pr.proyecto?.responsables?.proyecto?.correo||"";
     const destinatarios=[correoEmp,correoResp].filter(Boolean).join(",");
-    if(destinatarios){
+    if(destinatarios && confirm('¿Enviar correo de devolución?')){
       const allOk=[estSST,estMA,estRSE,estPer,estVeh].every(s=>s==="APROBADO");
+      const link='https://dmachacap33.github.io/Habilitaci-n-para-Proyectos/';
       const asunto=allOk?`Carpeta aprobada ${empName} ${pid}`:`Carpeta revisada ${empName} ${pid}`;
-      const cuerpo=allOk?"Su carpeta ha sido aprobada y puede pasar a recoger su carpeta física." : "Su carpeta fue revisada y se adjunta PDF con observaciones para subsanar.";
-      if(confirm('¿Enviar correo de devolución?')){
-        pdfYCorreo(clave,pid,{destinatarios,asunto,cuerpo,skipRevision:true,accion:'Devolución'});
-      }
+      const cuerpo=allOk?
+        `Su carpeta ha sido aprobada y puede pasar a recogerla en la oficina.\n\nPuede ingresar a ${link} para descargar las observaciones realizadas.`:
+        `Su carpeta fue revisada. Puede ingresar a ${link} para descargar las observaciones realizadas y pasar a recoger su carpeta física.`;
+      const payload={
+        action:'sendActionEmail',
+        data:{accion:'Devolución',empresaClave:clave,proyectoId:pid,destinatarios,correoEmp,correoResp,asunto,cuerpo}
+      };
+      enviarASheet(payload).then(()=>alert('Correo enviado')).catch(err=>alert('Error al enviar correo: '+err.message));
     }
   }
 }

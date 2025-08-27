@@ -206,7 +206,9 @@ function sendActionEmail(data) {
       } else if (data.accion === 'Notificación') {
         body = 'Usted está asignado para revisar la carpeta del proyecto ' + (data.proyectoId || '') + '.\n\nCarpeta: ' + (data.carpeta || '');
       } else if (data.accion === 'Devolución') {
-        body = 'La carpeta del proyecto ' + (data.proyectoId || '') + ' ha sido devuelta.';
+        body = 'La carpeta del proyecto ' + (data.proyectoId || '') + ' ha sido revisada.\n' +
+               'Puede ingresar a https://dmachacap33.github.io/Habilitaci-n-para-Proyectos/ ' +
+               'para descargar las observaciones realizadas y pasar a recoger su carpeta física.';
       } else {
         body = 'Se registró la acción ' + (data.accion || '') + ' para el proyecto ' + (data.proyectoId || '') + '.';
       }
@@ -220,7 +222,7 @@ function sendActionEmail(data) {
     };
 
     // Adjuntar PDF generado a partir del HTML si está disponible.
-    if (data.pdfHtml) {
+    if (data.pdfHtml && data.accion !== 'Devolución') {
       const pdfBlob = Utilities.newBlob(data.pdfHtml, 'text/html', 'reporte.html')
         .getAs('application/pdf')
         .setName(`reporte_${data.empresaClave || ''}_${data.proyectoId || ''}.pdf`);
