@@ -3542,7 +3542,7 @@ async function pdfYCorreo(clave,pid,opts={}){
       correoResp: snap.proyecto?.responsables?.proyecto?.correo || '',
       asunto,
       cuerpo,
-      // pdfHtml: html, // (Deshabilitado: adjuntar PDF en el futuro)
+      pdfHtml: html,
     }
   };
   try {
@@ -3672,11 +3672,7 @@ function registrarAccion(){
       const cuerpo=allOk?
         `Su carpeta ha sido aprobada y puede pasar a recogerla en la oficina.\n\nPuede ingresar a ${link} para descargar las observaciones realizadas.`:
         `Su carpeta fue revisada. Puede ingresar a ${link} para descargar las observaciones realizadas y pasar a recoger su carpeta física.`;
-      const payload={
-        action:'sendActionEmail',
-        data:{accion:'Devolución',empresaClave:clave,proyectoId:pid,destinatarios,correoEmp,correoResp,asunto,cuerpo}
-      };
-      enviarASheet(payload).then(()=>alert('Correo enviado')).catch(err=>alert('Error al enviar correo: '+err.message));
+      pdfYCorreo(clave,pid,{destinatarios,asunto,cuerpo,skipRevision:true,accion:'Devolución'});
     }
   }
 }
