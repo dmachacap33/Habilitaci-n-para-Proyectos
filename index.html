@@ -3526,14 +3526,20 @@ async function pdfYCorreo(clave,pid,opts={}){
       ${bannerSST}${bannerMA}${bannerRSE}
       <div class="no-print" style="margin-top:12px"><button onclick="window.print()">Imprimir / Guardar PDF</button></div>
     </body></html>`;
-  const correoResp = opts.destinatarios || snap.proyecto?.responsables?.proyecto?.correo || (snap.empresa?.datos?.correo||"");
+  const destinatarios = opts.destinatarios
+    ? (Array.isArray(opts.destinatarios) ? opts.destinatarios.join(',') : opts.destinatarios)
+    : [snap.empresa?.datos?.correo, snap.proyecto?.responsables?.proyecto?.correo]
+        .filter(Boolean)
+        .join(',');
   const payload = {
     action: 'sendActionEmail',
     data: {
       accion: opts.accion || 'Revisión',
       empresaClave: clave,
       proyectoId: pid,
-      destinatarios: correoResp,
+      destinatarios,
+      correoEmp: snap.empresa?.datos?.correo || '',
+      correoResp: snap.proyecto?.responsables?.proyecto?.correo || '',
       asunto,
       cuerpo,
       pdfHtml: html

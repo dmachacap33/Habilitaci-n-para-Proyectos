@@ -171,38 +171,63 @@ function sendActionEmail(data) {
       data && data.accion || ''
     ]);
 
+    // Determinar destinatarios. Se acepta una cadena con correos separados
+    // por coma o punto y coma, o bien un arreglo de correos.
     let correos = [];
     if (data && data.destinatarios) {
-      correos = String(data.destinatarios).split(',').map(s => s.trim()).filter(Boolean);
+      if (Array.isArray(data.destinatarios)) {
+        correos = data.destinatarios;
+      } else {
+        correos = String(data.destinatarios)
+          .split(/[;,]/)
+          .map(s => s.trim())
+          .filter(Boolean);
+      }
     } else {
-      correos = [data && data.correoSST, data && data.correoMA, data && data.correoRSE, data && data.correoResp, data && data.correoEmp]
-        .filter(Boolean);
+      correos = [
+        data && data.correoSST,
+        data && data.correoMA,
+        data && data.correoRSE,
+        data && data.correoResp,
+        data && data.correoEmp
+      ].filter(Boolean);
     }
-    if (correos.length > 0) {
-      let subject = data.asunto || `${data.accion || 'Acción'} ${data.empresaClave || ''} ${data.proyectoId || ''}`;
-      let body = data.cuerpo || '';
-      if (!body) {
-        if (data.accion === 'Recibido') {
-          body = 'Se registró la recepción del proyecto ' + (data.proyectoId || '') + '. Carpeta: ' + (data.carpeta || '');
-        } else if (data.accion === 'Notificación') {
-          body = 'Usted está asignado para revisar la carpeta del proyecto ' + (data.proyectoId || '') + '.\n\nCarpeta: ' + (data.carpeta || '');
-        } else if (data.accion === 'Devolución') {
-          body = 'La carpeta del proyecto ' + (data.proyectoId || '') + ' ha sido devuelta.';
-        } else {
-          body = 'Se registró la acción ' + (data.accion || '') + ' para el proyecto ' + (data.proyectoId || '') + '.';
-        }
-      }
-      const options = {
-        htmlBody: body.replace(/\n/g, '<br>')
-      };
-      if (data.pdfHtml) {
-        const pdfBlob = Utilities.newBlob(data.pdfHtml, 'text/html')
-          .getAs('application/pdf')
-          .setName(`reporte_${data.empresaClave || ''}_${data.proyectoId || ''}.pdf`);
-        options.attachments = [pdfBlob];
-      }
-      MailApp.sendEmail(correos.join(','), subject, body, options);
+
+    if (correos.length === 0) {
+      return { status: 'sin_destinatarios' };
     }
+
+    // Definir asunto y cuerpo del mensaje.
+    const subject = data.asunto || `${data.accion || 'Acción'} ${data.empresaClave || ''} ${data.proyectoId || ''}`;
+    let body = data.cuerpo || '';
+    if (!body) {
+      if (data.accion === 'Recibido') {
+        body = 'Se registró la recepción del proyecto ' + (data.proyectoId || '') + '. Carpeta: ' + (data.carpeta || '');
+      } else if (data.accion === 'Notificación') {
+        body = 'Usted está asignado para revisar la carpeta del proyecto ' + (data.proyectoId || '') + '.\n\nCarpeta: ' + (data.carpeta || '');
+      } else if (data.accion === 'Devolución') {
+        body = 'La carpeta del proyecto ' + (data.proyectoId || '') + ' ha sido devuelta.';
+      } else {
+        body = 'Se registró la acción ' + (data.accion || '') + ' para el proyecto ' + (data.proyectoId || '') + '.';
+      }
+    }
+
+    const options = {
+      to: correos.join(','),
+      subject: subject,
+      body: body,
+      htmlBody: body.replace(/\n/g, '<br>')
+    };
+
+    // Adjuntar PDF generado a partir del HTML si está disponible.
+    if (data.pdfHtml) {
+      const pdfBlob = Utilities.newBlob(data.pdfHtml, 'text/html', 'reporte.html')
+        .getAs('application/pdf')
+        .setName(`reporte_${data.empresaClave || ''}_${data.proyectoId || ''}.pdf`);
+      options.attachments = [pdfBlob];
+    }
+
+    MailApp.sendEmail(options);
 
     return { status: 'ok', message: 'Acción registrada y correo enviado.' };
   } catch (error) {
