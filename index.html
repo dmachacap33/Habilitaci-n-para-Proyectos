@@ -1612,6 +1612,22 @@ if (!conversation) {
       text: 'Por favor, cuéntame TODO sobre el proyecto: de qué se trata, dónde se hará (estación/DDV/terminal, ciudad/país), fechas y duración, actividades principales (p. ej., conducción, trabajos en caliente, izaje, alturas, espacio confinado, electricidad, arenado, hot tap, excavación), si habrá campamentos y rutas, cuántas personas y roles, si hay conductores u operadores de equipo pesado, si manipulan sustancias químicas o alimentos, si trabajarán fuera de Bolivia o con personal extranjero, vehículos/equipos previstos y cualquier tema ambiental (licencias, desmonte, áridos, ruido/emisiones).'
     }]
   }];
+} else {
+  let updated = false;
+  conversation = conversation.map(msg => {
+    if (msg.role === 'model') {
+      const raw = msg.parts.map(p => p.text).join('');
+      const parsed = extractResponseObject(raw);
+      if (parsed) {
+        updated = true;
+        return { role: 'model', parts: [{ text: JSON.stringify(parsed) }] };
+      }
+    }
+    return msg;
+  });
+  if (updated) {
+    saveConversation();
+  }
 }
 function saveConversation(){
   const max = 50;
