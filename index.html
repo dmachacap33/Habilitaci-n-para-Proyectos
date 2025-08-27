@@ -4,6 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>CRM de Habilitación - YPFB Transporte (v4)</title>
+<link rel="stylesheet" href="https://unpkg.com/intro.js@7.1.0/minified/introjs.min.css"/>
 <style>
 :root{
   --bg:#ffffff; --panel:#f0f6ff; --muted:#0d3c78; --text:#00224d;
@@ -193,10 +194,31 @@ canvas{width:100%;height:300px;border-radius:8px}
 #chat-input {
   flex: 1;
 }
+
+.introjs-tooltip{
+  background:linear-gradient(135deg,var(--brand),#fef4e6);
+  color:#fff;
+  border-radius:6px;
+  box-shadow:0 10px 20px rgba(0,0,0,0.15);
+}
+.introjs-tooltiptext{
+  background:none;
+}
+.introjs-button{
+  background:var(--brand);
+  color:#fff;
+  border:none;
+  border-radius:4px;
+}
+.introjs-button:focus,.introjs-button:hover{
+  background:#0960bd;
+}
+.introjs-bullets li a.active{background:#fff}
 </style>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+<script src="https://unpkg.com/intro.js@7.1.0/minified/intro.min.js"></script>
 <script src="outlook-email.js"></script>
 </head>
 <body>
@@ -1591,6 +1613,38 @@ function persistDB(){
   }
 }
 
+function persistPersonal(){
+  const clave=document.querySelector("#per-empresaSel")?.value;
+  const pid=document.querySelector("#per-proyectoSel")?.value;
+  if(!clave || !pid){ persistDB(); return; }
+  const pr=ensureProyecto(clave,pid);
+  if(database){
+    database.ref(`${clave}/proyectos/${pid}/personal`).set(pr.personal)
+      .catch(error=>{
+        console.error("Error al guardar datos en Firebase:", error);
+        alert("Error: No se pudieron guardar los cambios en la nube.");
+      });
+  }
+  localStorage.setItem("dbCacheV4", JSON.stringify(DBCACHE));
+  const tag=document.getElementById("db-json"); if(tag) tag.textContent=JSON.stringify(DBCACHE);
+}
+
+function persistVehiculos(){
+  const clave=document.querySelector("#veh-empresaSel")?.value;
+  const pid=document.querySelector("#veh-proyectoSel")?.value;
+  if(!clave || !pid){ persistDB(); return; }
+  const pr=ensureProyecto(clave,pid);
+  if(database){
+    database.ref(`${clave}/proyectos/${pid}/vehiculos`).set(pr.vehiculos)
+      .catch(error=>{
+        console.error("Error al guardar datos en Firebase:", error);
+        alert("Error: No se pudieron guardar los cambios en la nube.");
+      });
+  }
+  localStorage.setItem("dbCacheV4", JSON.stringify(DBCACHE));
+  const tag=document.getElementById("db-json"); if(tag) tag.textContent=JSON.stringify(DBCACHE);
+}
+
 function cargarUsuariosDesdeFirebase(){
   if(!database){
     USERS = JSON.parse(localStorage.getItem("usuariosApp")||"{}") || {};
@@ -2896,7 +2950,7 @@ function agregarPersona(){
   logProyecto(clave,pid);
 
   $("#per-nombre").value=$("#per-cargo").value=$("#per-id").value="";
-  persistDB();
+  persistPersonal();
   renderTablaPersonal();
   renderDashboard();
 }
@@ -2946,7 +3000,7 @@ function eliminarPersona(idx){
   const clave=$("#per-empresaSel").value, pid=$("#per-proyectoSel").value;
   logProyecto(clave,pid);
 
-  persistDB();
+  persistPersonal();
 }
 function editarPersona(idx){
   if(READONLY) return;
@@ -2998,19 +3052,23 @@ function editarPersona(idx){
   updateGuiasVisibility();
   $("#modal-persona").style.display="flex";
   box.addEventListener("input", e=>{
+    const pr = proyectoActualPersonal();
+    const p = pr.personal[editingPersonaIndex];
     if(e.target.classList.contains("pf-req-com")){
       if(!p.requisitosObs) p.requisitosObs={};
       p.requisitosObs[e.target.dataset.code]=e.target.value.trim();
-      persistDB();
+      persistPersonal();
       return;
     }
     if(e.target.id==="pf-id") p.personaId=e.target.value.trim();
     else if(e.target.id==="pf-nombre") p.nombre=e.target.value.trim();
     else if(e.target.id==="pf-cargo") p.cargo=e.target.value.trim();
     else if(e.target.id==="pf-com") p.comentarios=e.target.value.trim();
-    persistDB(); renderTablaPersonal(); renderDashboard();
+    persistPersonal(); renderTablaPersonal(); renderDashboard();
   });
   box.addEventListener("change", e=>{
+    const pr = proyectoActualPersonal();
+    const p = pr.personal[editingPersonaIndex];
     if(e.target.classList.contains("pf-req-com")){
       autoLs025FromPersonal(e.target.dataset.code, e.target.value.trim());
     }else if(e.target.classList.contains("pf-req")){
@@ -3025,7 +3083,7 @@ function editarPersona(idx){
         com.style.display='none';
       }
       updateGuiasVisibility();
-      persistDB();
+      persistPersonal();
       renderTablaPersonal();
       renderDashboard();
     }
@@ -3045,7 +3103,7 @@ function agregarPerfilGuia(){
   if(p.guiasMedicas.find(g=>g.perfil===perfil)){ alert("Ese perfil ya existe"); return; }
   const items = Object.fromEntries(GUIAS_PERFILES[perfil].map(k=>[k,""]));
   p.guiasMedicas.push({perfil, items});
-  persistDB(); renderGuiasPersonales(); renderTablaPersonal(); renderDashboard();
+  persistPersonal(); renderGuiasPersonales(); renderTablaPersonal(); renderDashboard();
 }
 function renderGuiasPersonales(){
   const pr = proyectoActualPersonal(); const p = pr.personal[editingPersonaIndex];
@@ -3070,12 +3128,12 @@ function renderGuiasPersonales(){
     if(e.target.tagName==="SELECT" && e.target.dataset.gix!==undefined){
       const gix=+e.target.dataset.gix, code=e.target.dataset.code, v=e.target.value;
       const pr = proyectoActualPersonal(); pr.personal[editingPersonaIndex].guiasMedicas[gix].items[code]=v;
-      persistDB(); renderTablaPersonal(); renderDashboard();
+      persistPersonal(); renderTablaPersonal(); renderDashboard();
     }
   });
 }
 function borrarGuia(idx){
-  const pr = proyectoActualPersonal(); pr.personal[editingPersonaIndex].guiasMedicas.splice(idx,1); persistDB(); renderGuiasPersonales(); renderTablaPersonal(); renderDashboard();
+  const pr = proyectoActualPersonal(); pr.personal[editingPersonaIndex].guiasMedicas.splice(idx,1); persistPersonal(); renderGuiasPersonales(); renderTablaPersonal(); renderDashboard();
 }
 function cerrarModal(id){ $("#"+id).style.display="none"; }
 
@@ -3098,7 +3156,7 @@ function agregarVehiculo(){
   logProyecto(clave,pid);
 
   $("#veh-placa").value=$("#veh-marca").value=$("#veh-tipo").value=$("#veh-id").value="";
-  persistDB();
+  persistVehiculos();
   renderTablaVehiculos();
   renderDashboard();
 }
@@ -3128,7 +3186,7 @@ function eliminarVehiculo(idx){
   const clave=$("#veh-empresaSel").value, pid=$("#veh-proyectoSel").value;
   logProyecto(clave,pid);
 
-  persistDB();
+  persistVehiculos();
 }
 function editarVehiculo(idx){
   if(READONLY) return;
@@ -3167,10 +3225,12 @@ function editarVehiculo(idx){
   box.appendChild(Object.assign(document.createElement("div"),{className:"section",innerHTML:`<label>Comentarios</label><textarea id="vf-com">${v.comentarios||""}</textarea>`}));
   $("#modal-vehiculo").style.display="flex";
   box.addEventListener("input", e=>{
+    const pr = proyectoActualVeh();
+    const v = pr.vehiculos[editingVehIndex];
     if(e.target.classList.contains("vf-req-com")){
       if(!v.reqComentarios) v.reqComentarios={};
       v.reqComentarios[e.target.dataset.code]=e.target.value.trim();
-      persistDB();
+      persistVehiculos();
       return;
     }
     if(e.target.id==="vf-id") v.vehiculoId=e.target.value.trim();
@@ -3178,9 +3238,11 @@ function editarVehiculo(idx){
     else if(e.target.id==="vf-marca") v.marca=e.target.value.trim();
     else if(e.target.id==="vf-tipo") v.tipo=e.target.value.trim();
     else if(e.target.id==="vf-com") v.comentarios=e.target.value.trim();
-    persistDB(); renderTablaVehiculos(); renderDashboard();
+    persistVehiculos(); renderTablaVehiculos(); renderDashboard();
   });
   box.addEventListener("change", e=>{
+    const pr = proyectoActualVeh();
+    const v = pr.vehiculos[editingVehIndex];
     if(e.target.classList.contains("vf-req-com")){
       autoLs025FromVeh(e.target.dataset.code, e.target.value.trim());
     }else if(e.target.classList.contains("vf-req")){
@@ -3194,7 +3256,7 @@ function editarVehiculo(idx){
       }else{
         com.style.display='none';
       }
-      persistDB();
+      persistVehiculos();
       renderTablaVehiculos();
       renderDashboard();
     }
@@ -3396,8 +3458,101 @@ function registrarAccion(){
   const pr = ensureProyecto(clave,pid);
   const estSST = estadoLSSST(pr.ls025), estMA = estadoLSMA(pr.ls025), estRSE = estadoLSRSE(pr.ls025);
   const estPer = estadoPersonal(pr.personal), estVeh = estadoVehiculos(pr.vehiculos);
-  registrarRevision(clave,pid,estSST,estMA,estRSE,estPer,estVeh,USUARIO.nombre,$("#rev-accion").value,USUARIO.correo);
-  enviarResultadosRevision(clave,pid);
+  const accion=$("#rev-accion").value;
+  registrarRevision(clave,pid,estSST,estMA,estRSE,estPer,estVeh,USUARIO.nombre,accion,USUARIO.correo);
+  if(accion==="Recibido"){
+    const emp=DBCACHE[clave];
+    const sstObj=pr.proyecto?.responsables?.sst||{};
+    const maObj=pr.proyecto?.responsables?.ma||{};
+    const rseObj=pr.proyecto?.responsables?.rse||{};
+    const respObj=pr.proyecto?.responsables?.proyecto||{};
+    const correoEmp=emp?.empresa?.datos?.correo||"";
+    const payload={
+      action:'sendActionEmail',
+      data:{
+        accion:'Recibido',
+        empresaClave:clave,
+        proyectoId:pid,
+        carpeta:emp?.empresa?.datos?.carpeta||'',
+        correoSST:sstObj.correo||'',
+        correoMA:maObj.correo||'',
+        correoRSE:rseObj.correo||'',
+        correoResp:respObj.correo||'',
+        correoEmp,
+        nomSST:sstObj.nombre||'',
+        nomMA:maObj.nombre||'',
+        nomRSE:rseObj.nombre||'',
+        nomResp:respObj.nombre||''
+      }
+    };
+    enviarASheet(payload);
+  } else if(accion==="Devolución"){
+    const emp=DBCACHE[clave];
+    const empName=emp?.empresa?.datos?.empresa || emp?.empresa?.nombre || clave;
+    const correoEmp=emp?.empresa?.datos?.correo||"";
+    const correoResp=pr.proyecto?.responsables?.proyecto?.correo||"";
+    const destinatarios=[correoEmp,correoResp].filter(Boolean).join(",");
+    if(destinatarios){
+      const allOk=[estSST,estMA,estRSE,estPer,estVeh].every(s=>s==="APROBADO");
+      const asunto=allOk?`Carpeta aprobada ${empName} ${pid}`:`Carpeta revisada ${empName} ${pid}`;
+      const cuerpo=allOk?"Su carpeta ha sido aprobada y puede pasar a recoger su carpeta física." : "Su carpeta fue revisada y se adjunta PDF con observaciones para subsanar.";
+      pdfYCorreo(clave,pid,{destinatarios,asunto,cuerpo,skipRevision:true,accion:'Devolución'});
+    }
+  }
+}
+
+/* ================== Tour interactivo ================== */
+function buildTourSteps(){
+  const $=s=>document.querySelector(s);
+  const steps=[{intro:"Bienvenido al CRM de Habilitación. Este tour le mostrará las funciones principales."}];
+  const dashTab=$(".tab[data-tab='dashboard']"), dashPanel=$("#panel-dashboard");
+  const cardsTab=$(".tab[data-tab='cards']"), search=$("#search");
+  const ypfbTab=$(".tab[data-tab='ypfb']"), ypfbPanel=$("#panel-ypfb");
+  const empPanel=$("#panel-empresa");
+  const lsPanel=$("#panel-ls025");
+  const perRow=$("#panel-personal .section .row");
+  const vehRow=$("#panel-vehiculos .section .row");
+  const resAccion=$("#rev-accion");
+  const userTab=$(".tab[data-tab='usuarios']");
+
+  if(dashTab) steps.push({element:dashTab,intro:"Ingresa al Dashboard para ver métricas generales."});
+  if(dashPanel) steps.push({element:dashPanel,intro:"El Dashboard resume el estado de tus proyectos."});
+  if(cardsTab) steps.push({element:cardsTab,intro:"Desde Cards Empresa puedes gestionar todas las carpetas."});
+  if(search) steps.push({element:search,intro:"Busca y filtra empresas o proyectos."});
+  if(ypfbTab) steps.push({element:ypfbTab,intro:"La sección YPFB muestra asignaciones pendientes y revisadas."});
+  if(ypfbPanel) steps.push({element:ypfbPanel,intro:"Aquí se listan las carpetas asignadas a YPFB."});
+  if(empPanel) steps.push({element:empPanel,intro:"En Empresa edita datos y crea nuevos proyectos."});
+  if(lsPanel) steps.push({element:lsPanel,intro:"En LS.025 selecciona S/N/NA y escribe comentarios por requisito."});
+  if(perRow) steps.push({element:perRow,intro:"Añade Personal indicando nombre, cargo e ID."});
+  if(vehRow) steps.push({element:vehRow,intro:"Registra Vehículos con su placa y características."});
+  if(resAccion) steps.push({element:resAccion,intro:"En Resumen registra acciones y genera reportes."});
+  if(USUARIO.admin && userTab) steps.push({element:userTab,intro:"Los administradores gestionan usuarios y roles aquí."});
+  return steps;
+}
+
+function startTour(){
+  const steps=buildTourSteps();
+  introJs().setOptions({
+    steps,
+    nextLabel:"Siguiente",
+    prevLabel:"Anterior",
+    doneLabel:"Finalizar"
+  }).onbeforechange(function(target){
+      if(target.classList.contains('tab')){
+        switchTab(target.dataset.tab);
+      }else{
+        const panel=target.closest('.panel');
+        if(panel) switchTab(panel.id.replace('panel-',''));
+      }
+  }).oncomplete(()=>{localStorage.setItem('tour-'+(USUARIO.correo||'anon'),'1');})
+    .onexit(()=>{localStorage.setItem('tour-'+(USUARIO.correo||'anon'),'1');})
+    .start();
+}
+function startTourOnce(){
+  const key='tour-'+(USUARIO.correo||'anon');
+  if(!localStorage.getItem(key)){
+    setTimeout(startTour,500);
+  }
 }
 
 async function notificarSiguiente(){
@@ -3405,46 +3560,39 @@ async function notificarSiguiente(){
   if(!clave || !pid) return;
   const emp=DBCACHE[clave];
   const pr=ensureProyecto(clave,pid);
-  const sst=pr.proyecto?.responsables?.sst?.correo||"";
-  const ma=pr.proyecto?.responsables?.ma?.correo||"";
-  const rse=pr.proyecto?.responsables?.rse?.correo||"";
-  const correoEmp=emp?.empresa?.datos?.correo||"";
-  const correoResp=pr.proyecto?.responsables?.proyecto?.correo||"";
-  const carpeta=emp?.empresa?.datos?.carpeta||CARPETA_BASE;
   const estSST=estadoLSSST(pr.ls025), estMA=estadoLSMA(pr.ls025), estRSE=estadoLSRSE(pr.ls025);
   const estPer=estadoPersonal(pr.personal), estVeh=estadoVehiculos(pr.vehiculos);
-  const payload={empresaClave:clave,proyectoId:pid,correoSST:sst,correoMA:ma,correoRSE:rse,correoEmp,correoResp,carpeta};
+  const sstObj=pr.proyecto?.responsables?.sst||{};
+  const maObj=pr.proyecto?.responsables?.ma||{};
+  const rseObj=pr.proyecto?.responsables?.rse||{};
+  const respObj=pr.proyecto?.responsables?.proyecto||{};
+  const correoEmp=emp?.empresa?.datos?.correo||"";
+  const payload={
+    action:'sendActionEmail',
+    data:{
+      accion:'Notificación',
+      empresaClave:clave,
+      proyectoId:pid,
+      carpeta:emp?.empresa?.datos?.carpeta||'',
+      correoSST:sstObj.correo||'',
+      correoMA:maObj.correo||'',
+      correoRSE:rseObj.correo||'',
+      correoResp:respObj.correo||'',
+      correoEmp,
+      nomSST:sstObj.nombre||'',
+      nomMA:maObj.nombre||'',
+      nomRSE:rseObj.nombre||'',
+      nomResp:respObj.nombre||''
+    }
+  };
   if(!confirm("¿Notificar a SST/MA/RSE y registrar en la hoja?")) return;
   try{
-    const r = await enviarASheet(payload);
-    const empName = emp?.empresa?.datos?.empresa || emp?.empresa?.nombre || clave;
-    const subject = `Carpeta para habilitar ${empName} ${pid}`;
-    const body = `Usted está asignado para revisar la carpeta.\n\nFavor ingresar el siguiente link para su ingreso:\n\n`;
-    [sst,ma,rse,correoResp,correoEmp].filter(Boolean).forEach((c,i)=>{
-      setTimeout(()=>enviarCorreoOutlook(c, subject, body), i*500);
-    });
-      registrarRevision(clave,pid,estSST,estMA,estRSE,estPer,estVeh,USUARIO.nombre,"Notificación a SST/MA/RSE",USUARIO.correo);
-    alert(r?.status||"Registro enviado");
+    await enviarASheet(payload);
+    registrarRevision(clave,pid,estSST,estMA,estRSE,estPer,estVeh,USUARIO.nombre,"Notificación a SST/MA/RSE",USUARIO.correo);
+    alert("Registro enviado");
   }catch(err){
     alert("Error al enviar: "+err.message);
   }
-}
-
-function enviarResultadosRevision(clave,pid){
-  const emp=DBCACHE[clave];
-  const pr=ensureProyecto(clave,pid);
-  const estSST=estadoLSSST(pr.ls025), estMA=estadoLSMA(pr.ls025), estRSE=estadoLSRSE(pr.ls025);
-  const estPer=estadoPersonal(pr.personal), estVeh=estadoVehiculos(pr.vehiculos);
-  if(![estSST,estMA,estRSE].every(s=>s && !s.startsWith("SIN"))) return;
-  const empName=emp?.empresa?.datos?.empresa || emp?.empresa?.nombre || clave;
-  const correoEmp=emp?.empresa?.datos?.correo||"";
-  const correoResp=pr.proyecto?.responsables?.proyecto?.correo||"";
-  const destinatarios=[correoEmp,correoResp].filter(Boolean).join(",");
-  if(!destinatarios) return;
-  const allOk=[estSST,estMA,estRSE,estPer,estVeh].every(s=>s==="APROBADO");
-  const asunto=allOk?`Carpeta aprobada ${empName} ${pid}`:`Carpeta revisada ${empName} ${pid}`;
-  const cuerpo=allOk?"Su carpeta ha sido aprobada y puede pasar a recoger su carpeta física.":"Su carpeta fue revisada y se adjunta PDF con observaciones para subsanar.";
-  pdfYCorreo(clave,pid,{destinatarios,asunto,cuerpo,skipRevision:true});
 }
 
 /* ================== Selectores de empresa/proyecto en paneles ================== */
@@ -3910,6 +4058,7 @@ function init(){
         });
     }
     $("#ls-rol").addEventListener("change", buildLs025);
+    startTourOnce();
 }
 init();
 </script>
