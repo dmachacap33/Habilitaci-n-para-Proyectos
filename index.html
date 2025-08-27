@@ -3052,6 +3052,8 @@ function editarPersona(idx){
   updateGuiasVisibility();
   $("#modal-persona").style.display="flex";
   box.addEventListener("input", e=>{
+    const pr = proyectoActualPersonal();
+    const p = pr.personal[editingPersonaIndex];
     if(e.target.classList.contains("pf-req-com")){
       if(!p.requisitosObs) p.requisitosObs={};
       p.requisitosObs[e.target.dataset.code]=e.target.value.trim();
@@ -3065,6 +3067,8 @@ function editarPersona(idx){
     persistPersonal(); renderTablaPersonal(); renderDashboard();
   });
   box.addEventListener("change", e=>{
+    const pr = proyectoActualPersonal();
+    const p = pr.personal[editingPersonaIndex];
     if(e.target.classList.contains("pf-req-com")){
       autoLs025FromPersonal(e.target.dataset.code, e.target.value.trim());
     }else if(e.target.classList.contains("pf-req")){
@@ -3221,6 +3225,8 @@ function editarVehiculo(idx){
   box.appendChild(Object.assign(document.createElement("div"),{className:"section",innerHTML:`<label>Comentarios</label><textarea id="vf-com">${v.comentarios||""}</textarea>`}));
   $("#modal-vehiculo").style.display="flex";
   box.addEventListener("input", e=>{
+    const pr = proyectoActualVeh();
+    const v = pr.vehiculos[editingVehIndex];
     if(e.target.classList.contains("vf-req-com")){
       if(!v.reqComentarios) v.reqComentarios={};
       v.reqComentarios[e.target.dataset.code]=e.target.value.trim();
@@ -3235,6 +3241,8 @@ function editarVehiculo(idx){
     persistVehiculos(); renderTablaVehiculos(); renderDashboard();
   });
   box.addEventListener("change", e=>{
+    const pr = proyectoActualVeh();
+    const v = pr.vehiculos[editingVehIndex];
     if(e.target.classList.contains("vf-req-com")){
       autoLs025FromVeh(e.target.dataset.code, e.target.value.trim());
     }else if(e.target.classList.contains("vf-req")){
