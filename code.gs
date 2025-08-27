@@ -17,6 +17,8 @@ function doPost(e) {
       result = askAIProxy(params.conversation, params.systemInstruction);
     } else if (action === 'saveToSheet') {
       result = saveToSheetAndNotify(params.data);
+    } else if (action === 'sendActionEmail') {
+      result = sendActionEmail(params.data);
     } else {
       result = saveToSheetAndNotify(params);
     }
@@ -144,6 +146,51 @@ function saveToSheetAndNotify(data) {
     return { status: "ok", message: "Datos guardados y notificación enviada." };
   } catch (error) {
     Logger.log("Error en saveToSheetAndNotify: " + error.toString());
+    return { error: error.message };
+  }
+}
+
+function sendActionEmail(data) {
+  try {
+    const ss = SpreadsheetApp.openById('1chdXUT5JeHwsbAkQA3XoB4px6SjJ4C4IHJM9fBEZhik');
+    const sheet = ss.getSheetByName('Hoja 1');
+    if (!sheet) {
+      throw new Error('No se encontró la hoja con el nombre "Hoja 1".');
+    }
+    const boliviaTime = Utilities.formatDate(new Date(), 'America/La_Paz', 'yyyy-MM-dd HH:mm:ss');
+    sheet.appendRow([
+      boliviaTime,
+      data && data.empresaClave || '',
+      data && data.proyectoId || '',
+      data && data.correoSST || '',
+      data && data.correoMA || '',
+      data && data.correoRSE || '',
+      data && data.carpeta || '',
+      data && data.correoEmp || '',
+      data && data.correoResp || '',
+      data && data.accion || ''
+    ]);
+
+    const correos = [data && data.correoSST, data && data.correoMA, data && data.correoRSE, data && data.correoResp, data && data.correoEmp]
+      .filter(Boolean);
+    if (correos.length > 0) {
+      let subject = `${data.accion || 'Acción'} ${data.empresaClave || ''} ${data.proyectoId || ''}`;
+      let body = '';
+      if (data.accion === 'Recibido') {
+        body = 'Se registró la recepción del proyecto ' + (data.proyectoId || '') + '. Carpeta: ' + (data.carpeta || '');
+      } else if (data.accion === 'Notificación') {
+        body = 'Usted está asignado para revisar la carpeta del proyecto ' + (data.proyectoId || '') + '.\n\nCarpeta: ' + (data.carpeta || '');
+      } else if (data.accion === 'Devolución') {
+        body = 'La carpeta del proyecto ' + (data.proyectoId || '') + ' ha sido devuelta.';
+      } else {
+        body = 'Se registró la acción ' + (data.accion || '') + ' para el proyecto ' + (data.proyectoId || '') + '.';
+      }
+      MailApp.sendEmail(correos.join(','), subject, body);
+    }
+
+    return { status: 'ok', message: 'Acción registrada y correo enviado.' };
+  } catch (error) {
+    Logger.log('Error en sendActionEmail: ' + error.toString());
     return { error: error.message };
   }
 }
