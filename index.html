@@ -3430,7 +3430,7 @@ function buildSnapshot(clave,pid){
     historial: pr.historial || []
   };
 }
-function pdfYCorreo(clave,pid,opts={}){
+async function pdfYCorreo(clave,pid,opts={}){
   const emp = DBCACHE[clave] || {};
   const pr = (emp.proyectos||{})[pid] || {};
   const estSST = estadoLSSST(pr.ls025), estMA = estadoLSMA(pr.ls025), estRSE = estadoLSRSE(pr.ls025);
@@ -3460,11 +3460,9 @@ function pdfYCorreo(clave,pid,opts={}){
    }
  }
  const asuntoDef = `[${clave}/${pid}] Habilitación — SST: ${estSST} · MA: ${estMA} · RSE: ${estRSE} · Personal: ${estPer} · Vehículos: ${estVeh}`;
- const cuerpoDef = `Estimados,\n\nSe adjuntan los reportes de habilitación para ${empName} (${clave}, ${pid}).\n\nEstados:\n- SST: ${estSST}\n- MA: ${estMA}\n- RSE: ${estRSE}\n- Personal: ${estPer}\n- Vehículos: ${estVeh}\n\nImportante: Guarde los PDF y adjúntelos manualmente en Outlook.\n\nAtentamente,\n${$("#userEmail").value||""}`;
-  const asunto = opts.asunto || asuntoDef;
-  const cuerpo = opts.cuerpo || cuerpoDef;
-  // view
-  const w = window.open("", "_blank");
+ const cuerpoDef = `Estimados,\n\nSe adjuntan los reportes de habilitación para ${empName} (${clave}, ${pid}).\n\nEstados:\n- SST: ${estSST}\n- MA: ${estMA}\n- RSE: ${estRSE}\n- Personal: ${estPer}\n- Vehículos: ${estVeh}\n\nAtentamente,\n${$("#userEmail").value||""}`;
+ const asunto = opts.asunto || asuntoDef;
+ const cuerpo = opts.cuerpo || cuerpoDef;
   const tableLS = ()=>{
     const rows = CATALOG_LS025.map(it=>{
       const r = (snap.ls025?.respuestas||[]).find(x=>x.reqId===it.id) || {};
@@ -3528,9 +3526,25 @@ function pdfYCorreo(clave,pid,opts={}){
       ${bannerSST}${bannerMA}${bannerRSE}
       <div class="no-print" style="margin-top:12px"><button onclick="window.print()">Imprimir / Guardar PDF</button></div>
     </body></html>`;
-  w.document.write(html); w.document.close();
   const correoResp = opts.destinatarios || snap.proyecto?.responsables?.proyecto?.correo || (snap.empresa?.datos?.correo||"");
-  setTimeout(()=>{ window.open(`mailto:${correoResp}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`,'_blank'); }, 800);
+  const payload = {
+    action: 'sendActionEmail',
+    data: {
+      accion: opts.accion || 'Revisión',
+      empresaClave: clave,
+      proyectoId: pid,
+      destinatarios: correoResp,
+      asunto,
+      cuerpo,
+      pdfHtml: html
+    }
+  };
+  try {
+    await enviarASheet(payload);
+    alert('Correo enviado');
+  } catch(err) {
+    alert('Error al enviar correo: '+err.message);
+  }
 }
 
 /* ================== Resumen / Export ================== */
@@ -3649,7 +3663,9 @@ function registrarAccion(){
       const allOk=[estSST,estMA,estRSE,estPer,estVeh].every(s=>s==="APROBADO");
       const asunto=allOk?`Carpeta aprobada ${empName} ${pid}`:`Carpeta revisada ${empName} ${pid}`;
       const cuerpo=allOk?"Su carpeta ha sido aprobada y puede pasar a recoger su carpeta física." : "Su carpeta fue revisada y se adjunta PDF con observaciones para subsanar.";
-      pdfYCorreo(clave,pid,{destinatarios,asunto,cuerpo,skipRevision:true,accion:'Devolución'});
+      if(confirm('¿Enviar correo de devolución?')){
+        pdfYCorreo(clave,pid,{destinatarios,asunto,cuerpo,skipRevision:true,accion:'Devolución'});
+      }
     }
   }
 }

@@ -171,21 +171,37 @@ function sendActionEmail(data) {
       data && data.accion || ''
     ]);
 
-    const correos = [data && data.correoSST, data && data.correoMA, data && data.correoRSE, data && data.correoResp, data && data.correoEmp]
-      .filter(Boolean);
+    let correos = [];
+    if (data && data.destinatarios) {
+      correos = String(data.destinatarios).split(',').map(s => s.trim()).filter(Boolean);
+    } else {
+      correos = [data && data.correoSST, data && data.correoMA, data && data.correoRSE, data && data.correoResp, data && data.correoEmp]
+        .filter(Boolean);
+    }
     if (correos.length > 0) {
-      let subject = `${data.accion || 'Acción'} ${data.empresaClave || ''} ${data.proyectoId || ''}`;
-      let body = '';
-      if (data.accion === 'Recibido') {
-        body = 'Se registró la recepción del proyecto ' + (data.proyectoId || '') + '. Carpeta: ' + (data.carpeta || '');
-      } else if (data.accion === 'Notificación') {
-        body = 'Usted está asignado para revisar la carpeta del proyecto ' + (data.proyectoId || '') + '.\n\nCarpeta: ' + (data.carpeta || '');
-      } else if (data.accion === 'Devolución') {
-        body = 'La carpeta del proyecto ' + (data.proyectoId || '') + ' ha sido devuelta.';
-      } else {
-        body = 'Se registró la acción ' + (data.accion || '') + ' para el proyecto ' + (data.proyectoId || '') + '.';
+      let subject = data.asunto || `${data.accion || 'Acción'} ${data.empresaClave || ''} ${data.proyectoId || ''}`;
+      let body = data.cuerpo || '';
+      if (!body) {
+        if (data.accion === 'Recibido') {
+          body = 'Se registró la recepción del proyecto ' + (data.proyectoId || '') + '. Carpeta: ' + (data.carpeta || '');
+        } else if (data.accion === 'Notificación') {
+          body = 'Usted está asignado para revisar la carpeta del proyecto ' + (data.proyectoId || '') + '.\n\nCarpeta: ' + (data.carpeta || '');
+        } else if (data.accion === 'Devolución') {
+          body = 'La carpeta del proyecto ' + (data.proyectoId || '') + ' ha sido devuelta.';
+        } else {
+          body = 'Se registró la acción ' + (data.accion || '') + ' para el proyecto ' + (data.proyectoId || '') + '.';
+        }
       }
-      MailApp.sendEmail(correos.join(','), subject, body);
+      const options = {
+        htmlBody: body.replace(/\n/g, '<br>')
+      };
+      if (data.pdfHtml) {
+        const pdfBlob = Utilities.newBlob(data.pdfHtml, 'text/html')
+          .getAs('application/pdf')
+          .setName(`reporte_${data.empresaClave || ''}_${data.proyectoId || ''}.pdf`);
+        options.attachments = [pdfBlob];
+      }
+      MailApp.sendEmail(correos.join(','), subject, body, options);
     }
 
     return { status: 'ok', message: 'Acción registrada y correo enviado.' };
