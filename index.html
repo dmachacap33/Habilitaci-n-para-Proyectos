@@ -3975,7 +3975,7 @@ function addMessage(text, sender, id = '') {
   chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-// Función principal que envía la solicitud a la API de Gemini
+// Reemplaza tu función askAI existente con esta
 async function askAI() {
   await ensureGeminiApiKey();
   if (!GEMINI_API_KEY) {
@@ -3989,19 +3989,21 @@ async function askAI() {
     historialPrompt = '\nHistorial previo para proyectos similares (' + currentProyecto + '):\n' +
       historial.map(h => `- Alcance: ${h.alcance}; TipoContrato: ${h.tipoContrato}; Personal: ${h.personal}; LS025: ${(h.ids||[]).join(',')}`).join('\n');
   }
- const systemInstruction = `Eres "iDavid", un asistente experto en la habilitación de proyectos bajo la normativa LS.025. Tu objetivo es guiar al usuario a través de un proceso conversacional para identificar con precisión todos los ítems del formulario LS.025 que aplican a su proyecto.
+    
+  // Usamos la instrucción mejorada para mantener el chat limpio
+  const systemInstruction = `Eres "iDavid", un asistente experto en la habilitación de proyectos bajo la normativa LS.025. Tu objetivo es guiar al usuario a través de un proceso conversacional para identificar con precisión todos los ítems del formulario LS.025 que aplican a su proyecto.
 
-**Tu Misión:**
+    **Tu Misión:**
 
-1.  **Conversación Limpia y Natural:** Mantén los mensajes cortos, amigables y libres de jerga técnica. **Nunca muestres el JSON o listas de IDs en el chat.** Toda esa información se procesa internamente.
-2.  **Inicio Amplio:** Comienza siempre con una pregunta general para entender la visión global del proyecto.
-3.  **Diálogo Guiado:** Realiza preguntas específicas y secuenciales para aclarar los detalles del proyecto (personal, actividades, MA, RSE, etc.).
-4.  **Justificación Bajo Demanda:** Solo explica el porqué de un ítem si el usuario te lo pregunta directamente. Sé conciso en tu explicación.
-5.  **Confirmación Final sin Listas:** Cuando hayas recopilado toda la información, no listes los IDs. En su lugar, confirma que estás listo para filtrar. Por ejemplo: "¡Listo! Ya he identificado los requisitos. ¿Confirmo para filtrar el formulario?".
-6.  **Formato de Respuesta JSON (Interno):** Tu respuesta final DEBE ser un objeto JSON puro. El campo "mensaje" es para el usuario y el campo "ids" es para el sistema. La estructura es: \`{"mensaje": "Tu mensaje para el usuario.", "ids": ["L001", ...], "cerrar": boolean}\`. Durante la conversación, \`cerrar\` es \`false\`. Solo es \`true\` en el mensaje final de confirmación.
+    1.  **Conversación Limpia y Natural:** Mantén los mensajes cortos, amigables y libres de jerga técnica. **Nunca muestres el JSON o listas de IDs en el chat.** Toda esa información se procesa internamente.
+    2.  **Inicio Amplio:** Comienza siempre con una pregunta general para entender la visión global del proyecto.
+    3.  **Diálogo Guiado:** Realiza preguntas específicas y secuenciales para aclarar los detalles del proyecto (personal, actividades, MA, RSE, etc.).
+    4.  **Justificación Bajo Demanda:** Solo explica el porqué de un ítem si el usuario te lo pregunta directamente. Sé conciso en tu explicación.
+    5.  **Confirmación Final sin Listas:** Cuando hayas recopilado toda la información, no listes los IDs. En su lugar, confirma que estás listo para filtrar. Por ejemplo: "¡Listo! Ya he identificado los requisitos. ¿Confirmo para filtrar el formulario?".
+    6.  **Formato de Respuesta JSON (Interno):** Tu respuesta final DEBE ser un objeto JSON puro. El campo "mensaje" es para el usuario y el campo "ids" es para el sistema. La estructura es: \`{"mensaje": "Tu mensaje para el usuario.", "ids": ["L001", ...], "cerrar": boolean}\`. Durante la conversación, \`cerrar\` es \`false\`. Solo es \`true\` en el mensaje final de confirmación.
 
-**Catálogo LS.025 para tu referencia:**
-\${ls025Context}\${historialPrompt}`;
+    **Catálogo LS.025 para tu referencia:**
+    \${ls025Context}\${historialPrompt}`;
 
   const apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
@@ -4026,14 +4028,29 @@ async function askAI() {
   conversation.push({ role: 'model', parts: [{ text }] });
   saveConversation();
 
-  // Intenta extraer JSON incluso si viene dentro de un bloque ```json
-  let jsonText = text;
-  const match = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (match) jsonText = match[1];
+  // --- LÓGICA DE EXTRACCIÓN MEJORADA ---
+  let jsonString = text;
+  
+  // Primero, intenta encontrar un bloque de código ```json
+  const codeBlockMatch = jsonString.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlockMatch) {
+    jsonString = codeBlockMatch[1];
+  } else {
+    // Si no hay bloque de código, busca el JSON anidado en el texto
+    const firstBrace = jsonString.indexOf('{');
+    const lastBrace = jsonString.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      jsonString = jsonString.substring(firstBrace, lastBrace + 1);
+    }
+  }
 
   try {
-    return JSON.parse(jsonText);
+    // Intenta convertir el texto extraído en un objeto JSON
+    return JSON.parse(jsonString);
   } catch (e) {
+    console.error("Fallo al parsear el JSON. Usando respuesta cruda como fallback. Respuesta:", text);
+    // Si todo falla, devuelve el texto original para no romper el chat.
+    // Esto es lo que causa el problema en tu imagen. Esta lógica lo previene.
     return { mensaje: text, ids: null, cerrar: false };
   }
 }
