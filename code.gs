@@ -179,11 +179,35 @@ function sendActionEmail(data) {
         .filter(Boolean);
     }
     if (correos.length > 0) {
-      let subject = data.asunto || `${data.accion || 'Acción'} ${data.empresaClave || ''} ${data.proyectoId || ''}`;
+      let subject = '';
+      if (data.asunto) {
+        subject = data.asunto;
+      } else if (data.accion === 'Recibido') {
+        subject = `Proyecto ${data.proyectoId || ''} ${data.carpeta || ''}`.trim();
+      } else {
+        subject = `${data.accion || 'Acción'} ${data.empresaClave || ''} ${data.proyectoId || ''}`.trim();
+      }
+
       let body = data.cuerpo || '';
       if (!body) {
         if (data.accion === 'Recibido') {
-          body = 'Se registró la recepción del proyecto ' + (data.proyectoId || '') + '. Carpeta: ' + (data.carpeta || '');
+          const lines = [`Se registró la recepción del proyecto ${data.proyectoId || ''}. Carpeta: ${data.carpeta || ''}`];
+          function addResp(role, name, email) {
+            const parts = [];
+            if (name) parts.push(name);
+            if (email) parts.push(email);
+            return parts.length ? `${role}: ${parts.join(' - ')}` : '';
+          }
+          const respLines = [
+            addResp('SST', data.nomSST, data.correoSST),
+            addResp('MA', data.nomMA, data.correoMA),
+            addResp('RSE', data.nomRSE, data.correoRSE),
+            addResp('Responsable', data.nomResp, data.correoResp)
+          ].filter(Boolean);
+          if (respLines.length) {
+            lines.push('', ...respLines);
+          }
+          body = lines.join('\n');
         } else if (data.accion === 'Notificación') {
           body = 'Usted está asignado para revisar la carpeta del proyecto ' + (data.proyectoId || '') + '.\n\nCarpeta: ' + (data.carpeta || '');
         } else if (data.accion === 'Devolución') {
@@ -192,6 +216,7 @@ function sendActionEmail(data) {
           body = 'Se registró la acción ' + (data.accion || '') + ' para el proyecto ' + (data.proyectoId || '') + '.';
         }
       }
+
       const options = {};
       if (data.pdfHtml) {
         const pdfBlob = HtmlService.createHtmlOutput(data.pdfHtml).getAs('application/pdf').setName(`reporte_${data.empresaClave || ''}_${data.proyectoId || ''}.pdf`);
