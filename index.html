@@ -4257,7 +4257,7 @@ function iniciarChatTeams(clave, pid) {
   const empresaName = empresa.empresa?.datos?.empresa || clave;
   const proyectoName = pr.proyecto?.nombre || pid;
   const topic = `Proyecto ${proyectoName} - ${empresaName}`;
-  const message = `Hola equipo, por favor revisar el proyecto ${proyectoName} de ${empresaName}.`;
+  const message = `Hola equipo, por favor revisar el proyecto ${proyectoName} de ${empresaName}. en la siguiente pagina pueden ingresar para verificar https://dmachacap33.github.io/Habilitaci-n-para-Proyectos/`;
   const teamsUrl = `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(emails.join(','))}&topicName=${encodeURIComponent(topic)}&message=${encodeURIComponent(message)}`;
   window.open(teamsUrl, '_blank');
 }
