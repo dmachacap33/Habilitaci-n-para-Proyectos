@@ -3693,14 +3693,15 @@ function registrarAccion(){
     const maObj=pr.proyecto?.responsables?.ma||{};
     const rseObj=pr.proyecto?.responsables?.rse||{};
     const respObj=pr.proyecto?.responsables?.proyecto||{};
+    const empName=emp?.empresa?.datos?.empresa || emp?.empresa?.nombre || clave;
     const correoEmp=emp?.empresa?.datos?.correo||"";
     const payload={
       action:'sendActionEmail',
       data:{
         accion:'Recibido',
         empresaClave:clave,
+        empresaNombre:empName,
         proyectoId:pid,
-        carpeta:emp?.empresa?.datos?.carpeta||CARPETA_BASE,
         correoSST:sstObj.correo||'',
         correoMA:maObj.correo||'',
         correoRSE:rseObj.correo||'',

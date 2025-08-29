@@ -183,7 +183,7 @@ function sendActionEmail(data) {
       if (data.asunto) {
         subject = data.asunto;
       } else if (data.accion === 'Recibido') {
-        subject = `Proyecto ${data.proyectoId || ''} ${data.carpeta || ''}`.trim();
+        subject = `Proyecto ${data.proyectoId || ''}`.trim();
       } else {
         subject = `${data.accion || 'Acción'} ${data.empresaClave || ''} ${data.proyectoId || ''}`.trim();
       }
@@ -191,7 +191,7 @@ function sendActionEmail(data) {
       let body = data.cuerpo || '';
       if (!body) {
         if (data.accion === 'Recibido') {
-          const lines = [`Se registró la recepción del proyecto ${data.proyectoId || ''}. Carpeta: ${data.carpeta || ''}`];
+          const lines = [`Se registró la recepción del proyecto ${data.proyectoId || ''} de la empresa ${data.empresaNombre || data.empresaClave || ''}.`];
           function addResp(role, name, email) {
             const parts = [];
             if (name) parts.push(name);
