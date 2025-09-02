@@ -2900,6 +2900,11 @@ function eliminarProyecto(clave, pid){
   const emp = DBCACHE[clave]; if(!emp) return;
   delete emp.proyectos[pid];
   persistDB();
+  if(CURRENT.proyectoId===pid){ delete CURRENT.proyectoId; localStorage.setItem("currentV4", JSON.stringify(CURRENT)); }
+  renderListaProyectos();
+  renderDashboard();
+  refreshSelectorsAll();
+  renderYPFB();
 }
 function eliminarEmpresa(){
   const clave = $("#emp-clave").value.trim();
