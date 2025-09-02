@@ -320,7 +320,10 @@ canvas{width:100%;height:300px;border-radius:8px}
 
     <div class="canvas-grid" style="margin-top:12px">
       <div class="canvas-card"><div class="small">Global A/P/O</div><canvas id="cv-donut" width="500" height="300"></canvas></div>
-      <div class="canvas-card"><div class="small">Proyectos revisados por responsable</div><canvas id="cv-resp" width="500" height="300"></canvas></div>
+      <div class="canvas-card"><div class="small">Revisiones SST</div><canvas id="cv-resp-sst" width="500" height="300"></canvas></div>
+      <div class="canvas-card"><div class="small">Revisiones MA</div><canvas id="cv-resp-ma" width="500" height="300"></canvas></div>
+      <div class="canvas-card"><div class="small">Revisiones RSE</div><canvas id="cv-resp-rse" width="500" height="300"></canvas></div>
+      <div class="canvas-card"><div class="small">Responsables de proyecto asignados</div><canvas id="cv-resp-proy" width="500" height="300"></canvas></div>
       <div class="canvas-card">
         <div class="row" style="align-items:center;justify-content:space-between;">
           <div id="cv-series-title" class="small">Proyectos / mes (creados vs. aprobados)</div>
@@ -2673,19 +2676,34 @@ function drawAllCharts(){
   const c1=$("#cv-donut"); if(c1) drawDonut(c1, aprob, parcial, observ);
   const c5=$("#cv-estados"); if(c5) drawStateBar(c5, aprob, parcial, observ);
 
-  // Proyectos revisados por responsable
-  const respMap = new Map();
+  // Proyectos revisados por responsable (SST/MA/RSE) y asignaciones de responsable de proyecto
+  const sstMap=new Map(), maMap=new Map(), rseMap=new Map(), projMap=new Map();
   empresaKeys().forEach(k=>{
     const emp=DBCACHE[k];
     Object.values(emp.proyectos||{}).forEach(pr=>{
-      const seen = new Set();
-      (pr.historial||[]).forEach(h=>{ if(h.responsable) seen.add(h.responsable); });
-      seen.forEach(r=>{ respMap.set(r, (respMap.get(r)||0)+1); });
+      const resp=pr.proyecto?.responsables||{};
+      if(resp.proyecto?.nombre){
+        const n=resp.proyecto.nombre;
+        projMap.set(n,(projMap.get(n)||0)+1);
+      }
+      const roleByCorreo={};
+      if(resp.sst?.correo) roleByCorreo[resp.sst.correo]={map:sstMap,name:resp.sst.nombre||resp.sst.correo};
+      if(resp.ma?.correo)  roleByCorreo[resp.ma.correo]={map:maMap,name:resp.ma.nombre||resp.ma.correo};
+      if(resp.rse?.correo) roleByCorreo[resp.rse.correo]={map:rseMap,name:resp.rse.nombre||resp.rse.correo};
+      const seen=new Set();
+      (pr.historial||[]).forEach(h=>{
+        const info=roleByCorreo[h.correo];
+        if(info && !seen.has(h.correo)){
+          info.map.set(info.name,(info.map.get(info.name)||0)+1);
+          seen.add(h.correo);
+        }
+      });
     });
   });
-  const respLabels = Array.from(respMap.keys());
-  const respValues = respLabels.map(r=>respMap.get(r));
-  const c2=$("#cv-resp"); if(c2) drawRespChart(c2, respLabels, respValues);
+  const cS=$("#cv-resp-sst"); if(cS) drawRespChart(cS, Array.from(sstMap.keys()), Array.from(sstMap.values()));
+  const cM=$("#cv-resp-ma"); if(cM) drawRespChart(cM, Array.from(maMap.keys()), Array.from(maMap.values()));
+  const cR=$("#cv-resp-rse"); if(cR) drawRespChart(cR, Array.from(rseMap.keys()), Array.from(rseMap.values()));
+  const cP=$("#cv-resp-proy"); if(cP) drawRespChart(cP, Array.from(projMap.keys()), Array.from(projMap.values()));
 
   // Series creados vs aprobados
   const scale=$("#series-scale")?$("#series-scale").value:"month";
