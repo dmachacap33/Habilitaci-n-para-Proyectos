@@ -3510,11 +3510,12 @@ async function pdfYCorreo(clave,pid,opts={}){
  const banner = (area,status)=>`<div class="aprob-banner ${status==="APROBADO"?"ok":"err"}">${status} ${area} — ${lastRev.responsable} (${lastRev.fecha})</div>`;
  let bannerSST="",bannerMA="",bannerRSE="";
  if(lastRev){
-   if(lastRev.estados?.sst && lastRev.estados?.personal && lastRev.estados?.vehiculos){
-     if(lastRev.estados.sst==="APROBADO" && lastRev.estados.personal==="APROBADO" && lastRev.estados.vehiculos==="APROBADO")
-       bannerSST = banner("SST","APROBADO");
-     else if([lastRev.estados.sst,lastRev.estados.personal,lastRev.estados.vehiculos].includes("OBSERVADO"))
-       bannerSST = banner("SST","OBSERVADO");
+   if(lastRev.estados){
+     const vals=[lastRev.estados.sst,lastRev.estados.personal,lastRev.estados.vehiculos];
+     const allOk=vals.every(v=>v==="APROBADO"||v==="NO APLICA");
+     const anyObs=vals.includes("OBSERVADO");
+     if(allOk) bannerSST = banner("SST","APROBADO");
+     else if(anyObs) bannerSST = banner("SST","OBSERVADO");
    }
    if(lastRev.estados?.ma){
      if(lastRev.estados.ma==="APROBADO") bannerMA = banner("MA","APROBADO");
@@ -3664,10 +3665,13 @@ function renderResumen(){
  const lastRev = histVerEst[histVerEst.length-1];
  let bannerSST="",bannerMA="",bannerRSE="";
  if(lastRev){
-   if(lastRev.estados?.sst && lastRev.estados?.personal && lastRev.estados?.vehiculos){
-     if(lastRev.estados.sst==="APROBADO" && lastRev.estados.personal==="APROBADO" && lastRev.estados.vehiculos==="APROBADO")
+   if(lastRev.estados){
+     const vals=[lastRev.estados.sst,lastRev.estados.personal,lastRev.estados.vehiculos];
+     const allOk=vals.every(v=>v==="APROBADO"||v==="NO APLICA");
+     const anyObs=vals.includes("OBSERVADO");
+     if(allOk)
        bannerSST = `<div class="aprob-banner ok">APROBADO SST — ${lastRev.responsable} (${lastRev.fecha})</div>`;
-     else if([lastRev.estados.sst,lastRev.estados.personal,lastRev.estados.vehiculos].includes("OBSERVADO"))
+     else if(anyObs)
        bannerSST = `<div class="aprob-banner err">OBSERVADO SST — ${lastRev.responsable} (${lastRev.fecha})</div>`;
    }
    if(lastRev.estados?.ma){
