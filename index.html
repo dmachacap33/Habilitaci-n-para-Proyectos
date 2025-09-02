@@ -1708,14 +1708,16 @@ function cargarUsuariosDesdeFirebase(){
     return;
   }
   const usersRef = database.ref('usuarios');
-  usersRef.on('value', snap => {
-    USERS = snap.val() || {};
-    localStorage.setItem("usuariosApp", JSON.stringify(USERS));
-    renderUsuarios();
-    console.log("Usuarios sincronizados con Firebase.");
-  }, err => {
-    console.error("Error al leer usuarios de Firebase:", err);
-  });
+  usersRef.once('value')
+    .then(snap => {
+      USERS = snap.val() || {};
+      localStorage.setItem("usuariosApp", JSON.stringify(USERS));
+      renderUsuarios();
+      console.log("Usuarios sincronizados con Firebase.");
+    })
+    .catch(err => {
+      console.error("Error al leer usuarios de Firebase:", err);
+    });
 }
 
 function cargarHistorialDesdeFirebase(){
@@ -1723,18 +1725,20 @@ function cargarHistorialDesdeFirebase(){
     HISTORIAL = {};
     return;
   }
-  const histRef = database.ref('historial');
-  histRef.on('value', snap => {
-    const data = snap.val() || {};
-    HISTORIAL = {};
-    Object.values(data).forEach(item => {
-      const key = (item.proyecto || '').toLowerCase();
-      if(!HISTORIAL[key]) HISTORIAL[key] = [];
-      HISTORIAL[key].push(item);
+  const histRef = database.ref('historial').limitToLast(100);
+  histRef.once('value')
+    .then(snap => {
+      const data = snap.val() || {};
+      HISTORIAL = {};
+      Object.values(data).forEach(item => {
+        const key = (item.proyecto || '').toLowerCase();
+        if(!HISTORIAL[key]) HISTORIAL[key] = [];
+        HISTORIAL[key].push(item);
+      });
+    })
+    .catch(err => {
+      console.error('Error al leer historial de Firebase:', err);
     });
-  }, err => {
-    console.error('Error al leer historial de Firebase:', err);
-  });
 }
 
 function guardarHistorialRegistro(entry){
@@ -1760,19 +1764,21 @@ function cargarDatosDesdeFirebase(){
     return;
   }
   const dbRef = database.ref();
-  dbRef.on('value', snapshot => {
-    const data = snapshot.val();
-    DBCACHE = data || {};
-    console.log("Datos sincronizados con Firebase.");
-    renderDashboard();
-    refreshSelectorsAll();
-    refreshEmpresaList();
-    renderYPFB();
-    checkResponsableRole();
-  }, error => {
-    console.error("Error al leer datos de Firebase:", error);
-    alert("Error de conexión con la base de datos en la nube. Revisa tu conexión a internet.");
-  });
+  dbRef.once('value')
+    .then(snapshot => {
+      const data = snapshot.val();
+      DBCACHE = data || {};
+      console.log("Datos descargados desde Firebase.");
+      renderDashboard();
+      refreshSelectorsAll();
+      refreshEmpresaList();
+      renderYPFB();
+      checkResponsableRole();
+    })
+    .catch(error => {
+      console.error("Error al leer datos de Firebase:", error);
+      alert("Error de conexión con la base de datos en la nube. Revisa tu conexión a internet.");
+    });
 }
 
 function logProyecto(clave,pid){
