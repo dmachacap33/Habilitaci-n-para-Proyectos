@@ -2874,6 +2874,10 @@ async function crearProyecto(){
   };
   DBCACHE[clave] = emp;
   persistDB();
+  renderListaProyectos();
+  renderDashboard();
+  refreshSelectorsAll();
+  renderYPFB();
 
   const pr = emp.proyectos[pid];
   const sst = pr.proyecto?.responsables?.sst?.correo || "";
@@ -2896,6 +2900,11 @@ function eliminarProyecto(clave, pid){
   const emp = DBCACHE[clave]; if(!emp) return;
   delete emp.proyectos[pid];
   persistDB();
+  if(CURRENT.proyectoId===pid){ delete CURRENT.proyectoId; localStorage.setItem("currentV4", JSON.stringify(CURRENT)); }
+  renderListaProyectos();
+  renderDashboard();
+  refreshSelectorsAll();
+  renderYPFB();
 }
 function eliminarEmpresa(){
   const clave = $("#emp-clave").value.trim();
@@ -2921,6 +2930,11 @@ function guardarEmpresa(){
   };
   ensureEmpresa(clave).empresa = payload;
   persistDB();
+  renderListaProyectos();
+  refreshEmpresaList();
+  refreshSelectorsAll();
+  renderDashboard();
+  renderYPFB();
 }
 function abrirProyecto(clave, pid, ro=false){
   CURRENT.empresaClave = clave; CURRENT.proyectoId = pid; localStorage.setItem("currentV4", JSON.stringify(CURRENT));
