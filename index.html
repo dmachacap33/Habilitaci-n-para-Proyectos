@@ -2173,8 +2173,7 @@ function verificarRevisionesCompletas(clave,pid){
       if(creator){
         enviarCorreoOutlook(creator, `Revisiones completas ${pid}`, 'SST, MA y RSE finalizaron sus revisiones.');
       }
-      const estSST=estadoLSSST(pr.ls025), estMA=estadoLSMA(pr.ls025), estRSE=estadoLSRSE(pr.ls025);
-      const estPer=estadoPersonal(pr.personal), estVeh=estadoVehiculos(pr.vehiculos);
+      const {estSST, estMA, estRSE, estPer, estVeh} = calcularEstados(pr);
       pr.historial.push({
         rev: pr.historial.length+1,
         fecha: nowIso(),
@@ -2321,7 +2320,7 @@ async function loadAllFromDir(){
 
 /* ================== Dashboard ================== */
 function pickGlobal(a,b,c){
-  const vals=[a,b,c];
+  const vals=[a,b,c].filter(v=>v && v!=="NO APLICA");
   if(vals.includes("OBSERVADO")) return "OBSERVADO";
   if(vals.some(v=>v==="PARCIAL" || (v && v.startsWith("SIN")))) return "PARCIAL";
   return "APROBADO";
@@ -2363,11 +2362,26 @@ function estadoVehiculos(arr){
   arr.forEach(v=> Object.values(v.requisitos||{}).forEach(x=>{ if(x && x!=='NA') vals.push(x); }) );
   return computeEstadoRapido_SPN(vals);
 }
-function estadoProyecto(pr){
-  const a=estadoLS(pr.ls025), b=estadoPersonal(pr.personal), c=estadoVehiculos(pr.vehiculos);
-  return pickGlobal(a,b,c);
+function calcularEstados(pr){
+  const tipos = pr.proyecto?.tipos || [];
+  const estSST = tipos.includes('CI') ? estadoLSSST(pr.ls025) : 'NO APLICA';
+  const estMA  = tipos.includes('CI') ? estadoLSMA(pr.ls025)  : 'NO APLICA';
+  const estRSE = tipos.includes('CI') ? estadoLSRSE(pr.ls025) : 'NO APLICA';
+  const estPer = tipos.includes('HP') ? estadoPersonal(pr.personal) : 'NO APLICA';
+  const estVeh = tipos.includes('HV') ? estadoVehiculos(pr.vehiculos) : 'NO APLICA';
+  const estLS  = tipos.includes('CI') ? pickGlobal(estSST, estMA, estRSE) : 'NO APLICA';
+  const est    = pickGlobal(estLS, estPer, estVeh);
+  return {estSST, estMA, estRSE, estPer, estVeh, estLS, est};
 }
-function cls(est){return est==="APROBADO"?"aprob":(est==="OBSERVADO"?"observ":"parcial");}
+function estadoProyecto(pr){
+  return calcularEstados(pr).est;
+}
+function cls(est){
+  if(est==="APROBADO" || est==="NO APLICA") return "aprob";
+  if(est==="OBSERVADO") return "observ";
+  if(est==="PARCIAL" || (est && est.startsWith("SIN"))) return "parcial";
+  return "";
+}
 
 function renderDashboard(){
   const q = $("#search").value.trim().toLowerCase();
@@ -2398,8 +2412,7 @@ function renderDashboard(){
       return true;
     }).map(pid=>{
       const pr = emp.proyectos[pid];
-      const estLS = estadoLS(pr.ls025), estPer = estadoPersonal(pr.personal), estVeh = estadoVehiculos(pr.vehiculos);
-      const est = estadoProyecto(pr);
+      const {estLS, estPer, estVeh, est} = calcularEstados(pr);
       if(est==="APROBADO") ap++; else if(est==="PARCIAL") pa++; else if(est==="OBSERVADO") ob++;
       proyectosCount++;
       return {pid, est, estLS, estPer, estVeh, nombre: pr.proyecto?.nombre||pid, tipos: pr.proyecto?.tipos||[], updated: pr.updatedAt};
@@ -3487,8 +3500,7 @@ function buildSnapshot(clave,pid){
 async function pdfYCorreo(clave,pid,opts={}){
   const emp = DBCACHE[clave] || {};
   const pr = (emp.proyectos||{})[pid] || {};
-  const estSST = estadoLSSST(pr.ls025), estMA = estadoLSMA(pr.ls025), estRSE = estadoLSRSE(pr.ls025);
-  const estPer = estadoPersonal(pr.personal), estVeh = estadoVehiculos(pr.vehiculos);
+  const {estSST, estMA, estRSE, estPer, estVeh} = calcularEstados(pr);
   if(!opts.skipRevision)
     registrarRevision(clave,pid,estSST,estMA,estRSE,estPer,estVeh,USUARIO.nombre,opts.accion||"Revisión",USUARIO.correo);
   const snap = buildSnapshot(clave,pid);
@@ -3559,7 +3571,7 @@ async function pdfYCorreo(clave,pid,opts={}){
     }).join("") || `<tr><td colspan="4">Sin registros</td></tr>`;
     return `<table><thead><tr><th>Rev</th><th>Fecha</th><th>Responsable</th><th>Acción</th></tr></thead><tbody>${rows}</tbody></table>`;
   };
-  const clsTag = s => s==="APROBADO"?"aprob":(s==="OBSERVADO"?"observ":"parcial");
+  const clsTag = s => (s==="APROBADO"||s==="NO APLICA")?"aprob":(s==="OBSERVADO"?"observ":"parcial");
   const html = `
   <!doctype html><html><head><meta charset="utf-8"><title>Reporte ${clave}/${pid}</title>
     <style>
@@ -3691,7 +3703,7 @@ function renderResumen(){
       </div>
       ${bannerSST}${bannerMA}${bannerRSE}`;
   function cls(est){
-    if(est==="APROBADO") return "aprob";
+    if(est==="APROBADO" || est==="NO APLICA") return "aprob";
     if(est==="OBSERVADO") return "observ";
     if(est==="PARCIAL" || (est && est.startsWith("SIN"))) return "parcial";
     return "";
@@ -3701,8 +3713,7 @@ function registrarAccion(){
   const clave=$("#res-empresaSel").value, pid=$("#res-proyectoSel").value;
   if(!clave || !pid) return;
   const pr = ensureProyecto(clave,pid);
-  const estSST = estadoLSSST(pr.ls025), estMA = estadoLSMA(pr.ls025), estRSE = estadoLSRSE(pr.ls025);
-  const estPer = estadoPersonal(pr.personal), estVeh = estadoVehiculos(pr.vehiculos);
+  const {estSST, estMA, estRSE, estPer, estVeh} = calcularEstados(pr);
   const accion=$("#rev-accion").value;
   registrarRevision(clave,pid,estSST,estMA,estRSE,estPer,estVeh,USUARIO.nombre,accion,USUARIO.correo);
   if(accion==="Recibido"){
@@ -3738,7 +3749,7 @@ function registrarAccion(){
     const correoResp=pr.proyecto?.responsables?.proyecto?.correo||"";
     const destinatarios=[correoEmp,correoResp].filter(Boolean).join(",");
     if(destinatarios && confirm('¿Enviar correo de devolución?')){
-      const allOk=[estSST,estMA,estRSE,estPer,estVeh].every(s=>s==="APROBADO");
+      const allOk=[estSST,estMA,estRSE,estPer,estVeh].every(s=>s==="APROBADO"||s==="NO APLICA");
       const link='https://dmachacap33.github.io/Habilitaci-n-para-Proyectos/';
       const asunto=allOk?`Carpeta aprobada ${empName} ${pid}`:`Carpeta revisada ${empName} ${pid}`;
       const cuerpo=allOk?
@@ -3808,8 +3819,7 @@ async function notificarSiguiente(){
   if(!clave || !pid) return;
   const emp=DBCACHE[clave];
   const pr=ensureProyecto(clave,pid);
-  const estSST=estadoLSSST(pr.ls025), estMA=estadoLSMA(pr.ls025), estRSE=estadoLSRSE(pr.ls025);
-  const estPer=estadoPersonal(pr.personal), estVeh=estadoVehiculos(pr.vehiculos);
+  const {estSST, estMA, estRSE, estPer, estVeh} = calcularEstados(pr);
   const sstObj=pr.proyecto?.responsables?.sst||{};
   const maObj=pr.proyecto?.responsables?.ma||{};
   const rseObj=pr.proyecto?.responsables?.rse||{};
