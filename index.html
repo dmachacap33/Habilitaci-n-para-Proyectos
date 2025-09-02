@@ -2874,6 +2874,10 @@ async function crearProyecto(){
   };
   DBCACHE[clave] = emp;
   persistDB();
+  renderListaProyectos();
+  renderDashboard();
+  refreshSelectorsAll();
+  renderYPFB();
 
   const pr = emp.proyectos[pid];
   const sst = pr.proyecto?.responsables?.sst?.correo || "";
@@ -2921,6 +2925,11 @@ function guardarEmpresa(){
   };
   ensureEmpresa(clave).empresa = payload;
   persistDB();
+  renderListaProyectos();
+  refreshEmpresaList();
+  refreshSelectorsAll();
+  renderDashboard();
+  renderYPFB();
 }
 function abrirProyecto(clave, pid, ro=false){
   CURRENT.empresaClave = clave; CURRENT.proyectoId = pid; localStorage.setItem("currentV4", JSON.stringify(CURRENT));
