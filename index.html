@@ -1659,7 +1659,8 @@ function saveConversation(){
 }
 function persistDB(){
   if (database) {
-    database.ref().set(DBCACHE)
+    // Use update to merge changes without removing unspecified nodes
+    database.ref().update(DBCACHE)
       .catch(error=>{
         console.error("Error al guardar datos en Firebase:", error);
         alert("Error: No se pudieron guardar los cambios en la nube.");
