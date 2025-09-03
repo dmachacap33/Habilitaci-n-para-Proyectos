@@ -2375,8 +2375,10 @@ function calcularEstados(pr){
   const estSST = tipos.includes('CI') ? estadoLSSST(pr.ls025) : 'NO APLICA';
   const estMA  = tipos.includes('CI') ? estadoLSMA(pr.ls025)  : 'NO APLICA';
   const estRSE = tipos.includes('CI') ? estadoLSRSE(pr.ls025) : 'NO APLICA';
-  const estPer = tipos.includes('HP') ? estadoPersonal(pr.personal) : 'NO APLICA';
-  const estVeh = tipos.includes('HV') ? estadoVehiculos(pr.vehiculos) : 'NO APLICA';
+  const hasPer = tipos.includes('HP') || (pr.personal && pr.personal.length);
+  const hasVeh = tipos.includes('HV') || (pr.vehiculos && pr.vehiculos.length);
+  const estPer = hasPer ? estadoPersonal(pr.personal) : 'NO APLICA';
+  const estVeh = hasVeh ? estadoVehiculos(pr.vehiculos) : 'NO APLICA';
   const estLS  = tipos.includes('CI') ? pickGlobal(estSST, estMA, estRSE) : 'NO APLICA';
   const est    = pickGlobal(estLS, estPer, estVeh);
   return {estSST, estMA, estRSE, estPer, estVeh, estLS, est};
