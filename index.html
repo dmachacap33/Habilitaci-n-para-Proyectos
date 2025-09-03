@@ -2457,7 +2457,7 @@ function renderDashboard(){
         <span class="note" style="margin-left:6px">${p.updated?new Date(p.updated).toLocaleDateString():""}</span>
         <div class="spacer"></div>
         <button class="btn small" onclick="abrirProyecto('${r.clave}','${p.pid}')">Editar</button>
-        <button class="btn secondary small" onclick="pdfYCorreo('${r.clave}','${p.pid}')">PDF + Correo</button>
+        <button class="btn secondary small" onclick="pdfYCorreo('${r.clave}','${p.pid}',{skipRevision:true,preview:true})">PDF + Correo</button>
       </div>
     `).join("");
     div.innerHTML = `
@@ -3526,6 +3526,7 @@ async function pdfYCorreo(clave,pid,opts={}){
   if(!opts.skipRevision)
     registrarRevision(clave,pid,estSST,estMA,estRSE,estPer,estVeh,USUARIO.nombre,opts.accion||"Revisión",USUARIO.correo);
   const snap = buildSnapshot(clave,pid);
+  const preview = opts.preview;
  const empName = snap.empresa?.datos?.empresa || snap.empresa?.nombre || clave;
  const histVer = (snap.historial||[]).filter(h=>h.accion!=="Recibido" && h.accion!=="Devolución" && h.estados);
  const lastRev = histVer[histVer.length-1];
@@ -3633,6 +3634,13 @@ async function pdfYCorreo(clave,pid,opts={}){
       ${bannerSST}${bannerMA}${bannerRSE}
       <div class="no-print" style="margin-top:12px"><button onclick="window.print()">Imprimir / Guardar PDF</button></div>
     </body></html>`;
+  if(preview){
+    const w = window.open('', '_blank');
+    if(w){
+      w.document.write(html);
+      w.document.close();
+    }
+  }
   const destinatarios = opts.destinatarios
     ? (Array.isArray(opts.destinatarios) ? opts.destinatarios.join(',') : opts.destinatarios)
     : [snap.empresa?.datos?.correo, snap.proyecto?.responsables?.proyecto?.correo]
