@@ -3799,6 +3799,9 @@ function registrarAccion(){
       pdfYCorreo(clave,pid,{destinatarios,asunto,cuerpo,skipRevision:true,accion:'Devolución'});
     }
   }
+  renderResumen();
+  renderDashboard();
+  renderYPFB();
 }
 
 /* ================== Tour interactivo ================== */
