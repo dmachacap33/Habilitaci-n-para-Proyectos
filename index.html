@@ -2929,6 +2929,14 @@ function eliminarEmpresa(){
 
   delete DBCACHE[clave];
 
+  if(database){
+    database.ref(clave).remove()
+      .catch(error=>{
+        console.error("Error al eliminar empresa en Firebase:", error);
+        alert("Error: No se pudo eliminar la empresa de la nube.");
+      });
+  }
+
   ["#emp-clave","#emp-nombre","#emp-tel","#emp-mail"].forEach(s=>{const el=$(s); if(el) el.value="";});
   $("#tb-proyectos").innerHTML="";
   persistDB();
