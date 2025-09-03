@@ -1767,9 +1767,13 @@ function cargarDatosDesdeFirebase(){
   const dbRef = database.ref();
   dbRef.once('value')
     .then(snapshot => {
-      const data = snapshot.val();
-      DBCACHE = data || {};
+      const data = snapshot.val() || {};
+      // Merge remote snapshot with any local changes to avoid losing
+      // recently added companies before the download completes
+      DBCACHE = { ...data, ...DBCACHE };
       console.log("Datos descargados desde Firebase.");
+      // Persist the merged cache so the remote database keeps new entries
+      persistDB();
       renderDashboard();
       refreshSelectorsAll();
       refreshEmpresaList();
