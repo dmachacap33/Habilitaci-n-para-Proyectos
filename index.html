@@ -250,7 +250,7 @@ canvas{width:100%;height:300px;border-radius:8px}
     <h3>Ingreso al sistema</h3>
     <input id="login-nombre" class="inp" list="personal-list" placeholder="Nombre"/>
     <input id="login-correo" class="inp" type="email" placeholder="Correo"/>
-    <input id="login-codigo" class="inp" type="text" placeholder="Código empleado" readonly/>
+    <input id="login-codigo" class="inp" type="text" placeholder="Código empleado" readonly style="display:none"/>
     <input id="login-pass1" class="inp" type="password" placeholder="Contraseña"/>
     <input id="login-pass2" class="inp" type="password" placeholder="Confirmar contraseña"/>
     <label class="row small" style="margin:8px 0"><input type="checkbox" id="login-remember"/> Mantener sesión iniciada</label>
@@ -1708,14 +1708,16 @@ function cargarUsuariosDesdeFirebase(){
     return;
   }
   const usersRef = database.ref('usuarios');
-  usersRef.on('value', snap => {
-    USERS = snap.val() || {};
-    localStorage.setItem("usuariosApp", JSON.stringify(USERS));
-    renderUsuarios();
-    console.log("Usuarios sincronizados con Firebase.");
-  }, err => {
-    console.error("Error al leer usuarios de Firebase:", err);
-  });
+  usersRef.once('value')
+    .then(snap => {
+      USERS = snap.val() || {};
+      localStorage.setItem("usuariosApp", JSON.stringify(USERS));
+      renderUsuarios();
+      console.log("Usuarios sincronizados con Firebase.");
+    })
+    .catch(err => {
+      console.error("Error al leer usuarios de Firebase:", err);
+    });
 }
 
 function cargarHistorialDesdeFirebase(){
@@ -1723,18 +1725,20 @@ function cargarHistorialDesdeFirebase(){
     HISTORIAL = {};
     return;
   }
-  const histRef = database.ref('historial');
-  histRef.on('value', snap => {
-    const data = snap.val() || {};
-    HISTORIAL = {};
-    Object.values(data).forEach(item => {
-      const key = (item.proyecto || '').toLowerCase();
-      if(!HISTORIAL[key]) HISTORIAL[key] = [];
-      HISTORIAL[key].push(item);
+  const histRef = database.ref('historial').limitToLast(100);
+  histRef.once('value')
+    .then(snap => {
+      const data = snap.val() || {};
+      HISTORIAL = {};
+      Object.values(data).forEach(item => {
+        const key = (item.proyecto || '').toLowerCase();
+        if(!HISTORIAL[key]) HISTORIAL[key] = [];
+        HISTORIAL[key].push(item);
+      });
+    })
+    .catch(err => {
+      console.error('Error al leer historial de Firebase:', err);
     });
-  }, err => {
-    console.error('Error al leer historial de Firebase:', err);
-  });
 }
 
 function guardarHistorialRegistro(entry){
@@ -1760,19 +1764,21 @@ function cargarDatosDesdeFirebase(){
     return;
   }
   const dbRef = database.ref();
-  dbRef.on('value', snapshot => {
-    const data = snapshot.val();
-    DBCACHE = data || {};
-    console.log("Datos sincronizados con Firebase.");
-    renderDashboard();
-    refreshSelectorsAll();
-    refreshEmpresaList();
-    renderYPFB();
-    checkResponsableRole();
-  }, error => {
-    console.error("Error al leer datos de Firebase:", error);
-    alert("Error de conexión con la base de datos en la nube. Revisa tu conexión a internet.");
-  });
+  dbRef.once('value')
+    .then(snapshot => {
+      const data = snapshot.val();
+      DBCACHE = data || {};
+      console.log("Datos descargados desde Firebase.");
+      renderDashboard();
+      refreshSelectorsAll();
+      refreshEmpresaList();
+      renderYPFB();
+      checkResponsableRole();
+    })
+    .catch(error => {
+      console.error("Error al leer datos de Firebase:", error);
+      alert("Error de conexión con la base de datos en la nube. Revisa tu conexión a internet.");
+    });
 }
 
 function logProyecto(clave,pid){
@@ -1875,17 +1881,19 @@ function confirmLogin(){
   const correo=$("#login-correo").value.trim().toLowerCase();
   const pass1=$("#login-pass1").value.trim();
   const pass2=$("#login-pass2").value.trim();
-  const codigo=$("#login-codigo").value.trim();
+  const codigoInput=$("#login-codigo");
+  const codigo=codigoInput?codigoInput.value.trim():"";
   const remember=$("#login-remember").checked;
-  if(!nombre||!correo||!codigo||!pass1){alert("Complete los datos");return;}
-  let u=USERS[codigo];
+  const key=codigo||correo;
+  if(!nombre||!correo||!pass1){alert("Complete los datos");return;}
+  let u=USERS[key];
   if(u){
     if(u.pass!==pass1){alert("Contraseña incorrecta");return;}
     u.ultimoLogin = new Date().toISOString();
   }else{
     if(pass1!==pass2){alert("Las contraseñas no coinciden");return;}
-    u={codigo,nombre,correo,pass:pass1,fecha:new Date().toISOString(), ultimoLogin:new Date().toISOString()};
-    USERS[codigo]=u;
+    u={codigo:key,nombre,correo,pass:pass1,fecha:new Date().toISOString(), ultimoLogin:new Date().toISOString()};
+    USERS[key]=u;
   }
   if(correo!=="david.machaca@ypfbtransporte.com.bo" && !tieneAsignacionResponsable(correo)){
     alert("No tiene responsabilidades asignadas en ningún proyecto.");
@@ -1893,11 +1901,11 @@ function confirmLogin(){
   }
   localStorage.setItem("usuariosApp",JSON.stringify(USERS));
   if(database){
-    database.ref('usuarios/'+codigo).set(u).catch(err=>{
+    database.ref('usuarios/'+key).set(u).catch(err=>{
       console.error("Error al guardar usuario en Firebase:", err);
     });
   }
-  USUARIO={codigo,nombre,correo,admin:correo==="david.machaca@ypfbtransporte.com.bo"};
+  USUARIO={codigo:key,nombre,correo,admin:correo==="david.machaca@ypfbtransporte.com.bo"};
   if(remember){
     localStorage.setItem("usuarioActual",JSON.stringify(USUARIO));
   }else{
@@ -4350,7 +4358,8 @@ function init(){
             if(per){
                 $("#login-correo").value = per.correo;
                 $("#login-correo").readOnly = !!per.correo;
-                $("#login-codigo").value = per.codigo;
+                const codigoInput=$("#login-codigo");
+                if(codigoInput) codigoInput.value = per.codigo;
                 $("#login-pass2").style.display = USERS[per.codigo]?"none":"block";
             }
         });
