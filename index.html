@@ -1659,7 +1659,8 @@ function saveConversation(){
 }
 function persistDB(){
   if (database) {
-    database.ref().set(DBCACHE)
+    // Use update to merge changes without removing unspecified nodes
+    database.ref().update(DBCACHE)
       .catch(error=>{
         console.error("Error al guardar datos en Firebase:", error);
         alert("Error: No se pudieron guardar los cambios en la nube.");
@@ -1766,9 +1767,13 @@ function cargarDatosDesdeFirebase(){
   const dbRef = database.ref();
   dbRef.once('value')
     .then(snapshot => {
-      const data = snapshot.val();
-      DBCACHE = data || {};
+      const data = snapshot.val() || {};
+      // Merge remote snapshot with any local changes to avoid losing
+      // recently added companies before the download completes
+      DBCACHE = { ...data, ...DBCACHE };
       console.log("Datos descargados desde Firebase.");
+      // Persist the merged cache so the remote database keeps new entries
+      persistDB();
       renderDashboard();
       refreshSelectorsAll();
       refreshEmpresaList();
@@ -2375,8 +2380,10 @@ function calcularEstados(pr){
   const estSST = tipos.includes('CI') ? estadoLSSST(pr.ls025) : 'NO APLICA';
   const estMA  = tipos.includes('CI') ? estadoLSMA(pr.ls025)  : 'NO APLICA';
   const estRSE = tipos.includes('CI') ? estadoLSRSE(pr.ls025) : 'NO APLICA';
-  const estPer = tipos.includes('HP') ? estadoPersonal(pr.personal) : 'NO APLICA';
-  const estVeh = tipos.includes('HV') ? estadoVehiculos(pr.vehiculos) : 'NO APLICA';
+  const hasPer = tipos.includes('HP') || (pr.personal && pr.personal.length);
+  const hasVeh = tipos.includes('HV') || (pr.vehiculos && pr.vehiculos.length);
+  const estPer = hasPer ? estadoPersonal(pr.personal) : 'NO APLICA';
+  const estVeh = hasVeh ? estadoVehiculos(pr.vehiculos) : 'NO APLICA';
   const estLS  = tipos.includes('CI') ? pickGlobal(estSST, estMA, estRSE) : 'NO APLICA';
   const est    = pickGlobal(estLS, estPer, estVeh);
   return {estSST, estMA, estRSE, estPer, estVeh, estLS, est};
@@ -2457,6 +2464,7 @@ function renderDashboard(){
         <span class="note" style="margin-left:6px">${p.updated?new Date(p.updated).toLocaleDateString():""}</span>
         <div class="spacer"></div>
         <button class="btn small" onclick="abrirProyecto('${r.clave}','${p.pid}')">Editar</button>
+        <button class="btn secondary small" onclick="verPDF('${r.clave}','${p.pid}')">PDF</button>
         <button class="btn secondary small" onclick="pdfYCorreo('${r.clave}','${p.pid}')">PDF + Correo</button>
       </div>
     `).join("");
@@ -3519,39 +3527,34 @@ function buildSnapshot(clave,pid){
     historial: pr.historial || []
   };
 }
-async function pdfYCorreo(clave,pid,opts={}){
+
+function buildPdfHtml(clave,pid){
   const emp = DBCACHE[clave] || {};
   const pr = (emp.proyectos||{})[pid] || {};
   const {estSST, estMA, estRSE, estPer, estVeh} = calcularEstados(pr);
-  if(!opts.skipRevision)
-    registrarRevision(clave,pid,estSST,estMA,estRSE,estPer,estVeh,USUARIO.nombre,opts.accion||"Revisión",USUARIO.correo);
   const snap = buildSnapshot(clave,pid);
- const empName = snap.empresa?.datos?.empresa || snap.empresa?.nombre || clave;
- const histVer = (snap.historial||[]).filter(h=>h.accion!=="Recibido" && h.accion!=="Devolución" && h.estados);
- const lastRev = histVer[histVer.length-1];
- const banner = (area,status)=>`<div class="aprob-banner ${status==="APROBADO"?"ok":"err"}">${status} ${area} — ${lastRev.responsable} (${lastRev.fecha})</div>`;
- let bannerSST="",bannerMA="",bannerRSE="";
- if(lastRev){
-   if(lastRev.estados){
-     const vals=[lastRev.estados.sst,lastRev.estados.personal,lastRev.estados.vehiculos];
-     const allOk=vals.every(v=>v==="APROBADO"||v==="NO APLICA");
-     const anyObs=vals.includes("OBSERVADO");
-     if(allOk) bannerSST = banner("SST","APROBADO");
-     else if(anyObs) bannerSST = banner("SST","OBSERVADO");
-   }
-   if(lastRev.estados?.ma){
-     if(lastRev.estados.ma==="APROBADO") bannerMA = banner("MA","APROBADO");
-     else if(lastRev.estados.ma==="OBSERVADO") bannerMA = banner("MA","OBSERVADO");
-   }
-   if(lastRev.estados?.rse){
-     if(lastRev.estados.rse==="APROBADO") bannerRSE = banner("RSE","APROBADO");
-     else if(lastRev.estados.rse==="OBSERVADO") bannerRSE = banner("RSE","OBSERVADO");
-   }
- }
- const asuntoDef = `[${clave}/${pid}] Habilitación — SST: ${estSST} · MA: ${estMA} · RSE: ${estRSE} · Personal: ${estPer} · Vehículos: ${estVeh}`;
- const cuerpoDef = `Estimados,\n\nSe adjuntan los reportes de habilitación para ${empName} (${clave}, ${pid}).\n\nEstados:\n- SST: ${estSST}\n- MA: ${estMA}\n- RSE: ${estRSE}\n- Personal: ${estPer}\n- Vehículos: ${estVeh}\n\nAtentamente,\n${$("#userEmail").value||""}`;
- const asunto = opts.asunto || asuntoDef;
- const cuerpo = opts.cuerpo || cuerpoDef;
+  const empName = snap.empresa?.datos?.empresa || snap.empresa?.nombre || clave;
+  const histVer = (snap.historial||[]).filter(h=>h.accion!=="Recibido" && h.accion!=="Devolución" && h.estados);
+  const lastRev = histVer[histVer.length-1];
+  const banner = (area,status)=>`<div class="aprob-banner ${status==="APROBADO"?"ok":"err"}">${status} ${area} — ${lastRev.responsable} (${lastRev.fecha})</div>`;
+  let bannerSST="",bannerMA="",bannerRSE="";
+  if(lastRev){
+    if(lastRev.estados){
+      const vals=[lastRev.estados.sst,lastRev.estados.personal,lastRev.estados.vehiculos];
+      const allOk=vals.every(v=>v==="APROBADO"||v==="NO APLICA");
+      const anyObs=vals.includes("OBSERVADO");
+      if(allOk) bannerSST = banner("SST","APROBADO");
+      else if(anyObs) bannerSST = banner("SST","OBSERVADO");
+    }
+    if(lastRev.estados?.ma){
+      if(lastRev.estados.ma==="APROBADO") bannerMA = banner("MA","APROBADO");
+      else if(lastRev.estados.ma==="OBSERVADO") bannerMA = banner("MA","OBSERVADO");
+    }
+    if(lastRev.estados?.rse){
+      if(lastRev.estados.rse==="APROBADO") bannerRSE = banner("RSE","APROBADO");
+      else if(lastRev.estados.rse==="OBSERVADO") bannerRSE = banner("RSE","OBSERVADO");
+    }
+  }
   const tableLS = ()=>{
     const rows = CATALOG_LS025.map(it=>{
       const r = (snap.ls025?.respuestas||[]).find(x=>x.reqId===it.id) || {};
@@ -3633,6 +3636,23 @@ async function pdfYCorreo(clave,pid,opts={}){
       ${bannerSST}${bannerMA}${bannerRSE}
       <div class="no-print" style="margin-top:12px"><button onclick="window.print()">Imprimir / Guardar PDF</button></div>
     </body></html>`;
+  return {html, snap, estSST, estMA, estRSE, estPer, estVeh, empName};
+}
+
+function verPDF(clave,pid){
+  const {html} = buildPdfHtml(clave,pid);
+  const w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
+}
+async function pdfYCorreo(clave,pid,opts={}){
+  const {html, snap, estSST, estMA, estRSE, estPer, estVeh, empName} = buildPdfHtml(clave,pid);
+  if(!opts.skipRevision)
+    registrarRevision(clave,pid,estSST,estMA,estRSE,estPer,estVeh,USUARIO.nombre,opts.accion||"Revisión",USUARIO.correo);
+  const asuntoDef = `[${clave}/${pid}] Habilitación — SST: ${estSST} · MA: ${estMA} · RSE: ${estRSE} · Personal: ${estPer} · Vehículos: ${estVeh}`;
+  const cuerpoDef = `Estimados,\n\nSe adjuntan los reportes de habilitación para ${empName} (${clave}, ${pid}).\n\nEstados:\n- SST: ${estSST}\n- MA: ${estMA}\n- RSE: ${estRSE}\n- Personal: ${estPer}\n- Vehículos: ${estVeh}\n\nAtentamente,\n${$("#userEmail").value||""}`;
+  const asunto = opts.asunto || asuntoDef;
+  const cuerpo = opts.cuerpo || cuerpoDef;
   const destinatarios = opts.destinatarios
     ? (Array.isArray(opts.destinatarios) ? opts.destinatarios.join(',') : opts.destinatarios)
     : [snap.empresa?.datos?.correo, snap.proyecto?.responsables?.proyecto?.correo]
