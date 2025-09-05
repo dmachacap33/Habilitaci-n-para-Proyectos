@@ -3543,25 +3543,30 @@ function buildPdfHtml(clave,pid){
   const snap = buildSnapshot(clave,pid);
   const empName = snap.empresa?.datos?.empresa || snap.empresa?.nombre || clave;
   const histVer = (snap.historial||[]).filter(h=>h.accion!=="Recibido" && h.accion!=="Devolución" && h.estados);
-  const lastRev = histVer[histVer.length-1];
-  const banner = (area,status)=>`<div class="aprob-banner ${status==="APROBADO"?"ok":"err"}">${status} ${area} — ${lastRev.responsable} (${lastRev.fecha})</div>`;
+  const sstCorreo = pr.proyecto?.responsables?.sst?.correo || "";
+  const maCorreo  = pr.proyecto?.responsables?.ma?.correo || "";
+  const rseCorreo = pr.proyecto?.responsables?.rse?.correo || "";
+  const revs = [...histVer].reverse();
+  const revSST = revs.find(h=>h.correo===sstCorreo);
+  const revMA  = revs.find(h=>h.correo===maCorreo);
+  const revRSE = revs.find(h=>h.correo===rseCorreo);
+  const banner = (area,status,resp,fecha)=>
+    `<div class="aprob-banner ${status==="APROBADO"?"ok":"err"}">${status} ${area} — ${resp} (${fecha})</div>`;
   let bannerSST="",bannerMA="",bannerRSE="";
-  if(lastRev){
-    if(lastRev.estados){
-      const vals=[lastRev.estados.sst,lastRev.estados.personal,lastRev.estados.vehiculos];
-      const allOk=vals.every(v=>v==="APROBADO"||v==="NO APLICA");
-      const anyObs=vals.includes("OBSERVADO");
-      if(allOk) bannerSST = banner("SST","APROBADO");
-      else if(anyObs) bannerSST = banner("SST","OBSERVADO");
-    }
-    if(lastRev.estados?.ma){
-      if(lastRev.estados.ma==="APROBADO") bannerMA = banner("MA","APROBADO");
-      else if(lastRev.estados.ma==="OBSERVADO") bannerMA = banner("MA","OBSERVADO");
-    }
-    if(lastRev.estados?.rse){
-      if(lastRev.estados.rse==="APROBADO") bannerRSE = banner("RSE","APROBADO");
-      else if(lastRev.estados.rse==="OBSERVADO") bannerRSE = banner("RSE","OBSERVADO");
-    }
+  if(revSST && revSST.estados){
+    const vals=[revSST.estados.sst,revSST.estados.personal,revSST.estados.vehiculos];
+    const allOk=vals.every(v=>v==="APROBADO"||v==="NO APLICA");
+    const anyObs=vals.includes("OBSERVADO");
+    if(allOk) bannerSST = banner("SST","APROBADO",revSST.responsable,revSST.fecha);
+    else if(anyObs) bannerSST = banner("SST","OBSERVADO",revSST.responsable,revSST.fecha);
+  }
+  if(revMA && revMA.estados?.ma){
+    if(revMA.estados.ma==="APROBADO") bannerMA = banner("MA","APROBADO",revMA.responsable,revMA.fecha);
+    else if(revMA.estados.ma==="OBSERVADO") bannerMA = banner("MA","OBSERVADO",revMA.responsable,revMA.fecha);
+  }
+  if(revRSE && revRSE.estados?.rse){
+    if(revRSE.estados.rse==="APROBADO") bannerRSE = banner("RSE","APROBADO",revRSE.responsable,revRSE.fecha);
+    else if(revRSE.estados.rse==="OBSERVADO") bannerRSE = banner("RSE","OBSERVADO",revRSE.responsable,revRSE.fecha);
   }
   const tableLS = ()=>{
     const rows = CATALOG_LS025.map(it=>{
@@ -3712,30 +3717,34 @@ function renderResumen(){
      <td class="status ${cls(h.estados?.personal)}">${h.estados?.personal||""}</td>
      <td class="status ${cls(h.estados?.vehiculos)}">${h.estados?.vehiculos||""}</td></tr>`)
    .join("") || `<tr><td colspan="9">Sin revisiones</td></tr>`;
- const lastRev = histVerEst[histVerEst.length-1];
+ const sstCorreo = snap.proyecto?.responsables?.sst?.correo || "";
+ const maCorreo  = snap.proyecto?.responsables?.ma?.correo || "";
+ const rseCorreo = snap.proyecto?.responsables?.rse?.correo || "";
+ const revs = [...histVerEst].reverse();
+ const revSST = revs.find(h=>h.correo===sstCorreo);
+ const revMA  = revs.find(h=>h.correo===maCorreo);
+ const revRSE = revs.find(h=>h.correo===rseCorreo);
  let bannerSST="",bannerMA="",bannerRSE="";
- if(lastRev){
-   if(lastRev.estados){
-     const vals=[lastRev.estados.sst,lastRev.estados.personal,lastRev.estados.vehiculos];
-     const allOk=vals.every(v=>v==="APROBADO"||v==="NO APLICA");
-     const anyObs=vals.includes("OBSERVADO");
-     if(allOk)
-       bannerSST = `<div class="aprob-banner ok">APROBADO SST — ${lastRev.responsable} (${lastRev.fecha})</div>`;
-     else if(anyObs)
-       bannerSST = `<div class="aprob-banner err">OBSERVADO SST — ${lastRev.responsable} (${lastRev.fecha})</div>`;
-   }
-   if(lastRev.estados?.ma){
-     if(lastRev.estados.ma==="APROBADO")
-       bannerMA = `<div class="aprob-banner ok">APROBADO MA — ${lastRev.responsable} (${lastRev.fecha})</div>`;
-     else if(lastRev.estados.ma==="OBSERVADO")
-       bannerMA = `<div class="aprob-banner err">OBSERVADO MA — ${lastRev.responsable} (${lastRev.fecha})</div>`;
-   }
-   if(lastRev.estados?.rse){
-     if(lastRev.estados.rse==="APROBADO")
-       bannerRSE = `<div class="aprob-banner ok">APROBADO RSE — ${lastRev.responsable} (${lastRev.fecha})</div>`;
-     else if(lastRev.estados.rse==="OBSERVADO")
-       bannerRSE = `<div class="aprob-banner err">OBSERVADO RSE — ${lastRev.responsable} (${lastRev.fecha})</div>`;
-   }
+ if(revSST && revSST.estados){
+   const vals=[revSST.estados.sst,revSST.estados.personal,revSST.estados.vehiculos];
+   const allOk=vals.every(v=>v==="APROBADO"||v==="NO APLICA");
+   const anyObs=vals.includes("OBSERVADO");
+   if(allOk)
+     bannerSST = `<div class="aprob-banner ok">APROBADO SST — ${revSST.responsable} (${revSST.fecha})</div>`;
+   else if(anyObs)
+     bannerSST = `<div class="aprob-banner err">OBSERVADO SST — ${revSST.responsable} (${revSST.fecha})</div>`;
+ }
+ if(revMA && revMA.estados?.ma){
+   if(revMA.estados.ma==="APROBADO")
+     bannerMA = `<div class="aprob-banner ok">APROBADO MA — ${revMA.responsable} (${revMA.fecha})</div>`;
+   else if(revMA.estados.ma==="OBSERVADO")
+     bannerMA = `<div class="aprob-banner err">OBSERVADO MA — ${revMA.responsable} (${revMA.fecha})</div>`;
+ }
+ if(revRSE && revRSE.estados?.rse){
+   if(revRSE.estados.rse==="APROBADO")
+     bannerRSE = `<div class="aprob-banner ok">APROBADO RSE — ${revRSE.responsable} (${revRSE.fecha})</div>`;
+   else if(revRSE.estados.rse==="OBSERVADO")
+     bannerRSE = `<div class="aprob-banner err">OBSERVADO RSE — ${revRSE.responsable} (${revRSE.fecha})</div>`;
  }
   $("#resumen-content").innerHTML = `
     <div class="kpi">
