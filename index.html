@@ -22,6 +22,7 @@ header{position:sticky;top:0;background:var(--brand);color:#fff;padding:12px 16p
 .btn{border:none;background:var(--brand);color:#fff;font-weight:700;padding:9px 12px;border-radius:12px;cursor:pointer}
 .btn.secondary{background:#fff;color:var(--brand);border:1px solid var(--brand)}
 .btn.ghost{background:transparent;border:1px solid var(--brand);color:var(--brand)}
+.btn.icon{padding:6px 8px;display:inline-flex;align-items:center;justify-content:center}
 .small{font-size:13px}
 .wrap{max-width:1280px;margin:18px auto;padding:0 16px}
 .banner{display:none;margin-top:10px;padding:10px;border:1px dashed var(--border);border-radius:10px;background:#e6efff;color:var(--text)}
@@ -68,6 +69,9 @@ textarea{min-height:80px;resize:vertical}
 .badge.ok{background:rgba(34,197,94,.15);color:var(--ok)}
 .badge.warn{background:rgba(234,179,8,.15);color:var(--warn)}
 .badge.err{background:rgba(239,68,68,.15);color:var(--err)}
+.badge.muted{background:rgba(100,116,139,.2);color:#475569}
+.badge.info{background:rgba(59,130,246,.18);color:var(--brand)}
+.table tr.row-hidden{opacity:.55}
 .aprob-banner{padding:6px;margin-top:10px;text-align:center;font-weight:bold;border:2px solid}
 .aprob-banner.ok{border-color:var(--ok);color:var(--ok)}
 .aprob-banner.err{border-color:var(--err);color:var(--err)}
@@ -443,9 +447,21 @@ canvas{width:100%;height:300px;border-radius:8px}
         <input id="per-nombre" class="inp" type="text" placeholder="Nombre del trabajador" style="max-width:280px"/>
         <input id="per-cargo" class="inp" type="text" placeholder="Cargo" style="max-width:200px"/>
         <input id="per-id" class="inp" type="text" placeholder="PersonaID (ej. PER-0456)" style="max-width:180px"/>
-        <button class="btn" onclick="agregarPersona()">Agregar</button>
+        <button id="per-add-btn" class="btn" onclick="agregarPersona()">Agregar</button>
       </div>
       <div class="note">FS.100 aparece cuando “Exámenes de Riesgo” = S en requisitos.</div>
+    </div>
+
+    <div class="section">
+      <div class="row" style="flex-wrap:wrap">
+        <div style="flex:1;min-width:240px">
+          <label>Biblioteca de personal validado</label>
+          <select id="per-bibliotecaSel" class="inp"></select>
+        </div>
+        <button id="per-biblioteca-usar" class="btn secondary" onclick="importarPersonaBiblioteca()">Usar en este proyecto</button>
+        <button id="per-biblioteca-admin" class="btn ghost" onclick="abrirBiblioteca('personal')">Administrar biblioteca</button>
+      </div>
+      <div class="note" id="per-biblioteca-note">Comparte personal aprobado entre empresas sin volver a registrarlo.</div>
     </div>
 
     <div style="overflow:auto;margin-top:8px">
@@ -469,8 +485,20 @@ canvas{width:100%;height:300px;border-radius:8px}
         <input id="veh-marca" class="inp" type="text" placeholder="Marca" style="max-width:160px"/>
         <input id="veh-tipo" class="inp" type="text" placeholder="Tipo/Modelo/Año" style="max-width:220px"/>
         <input id="veh-id" class="inp" type="text" placeholder="VehiculoID (ej. VEH-1234ABC)" style="max-width:200px"/>
-        <button class="btn" onclick="agregarVehiculo()">Agregar</button>
+        <button id="veh-add-btn" class="btn" onclick="agregarVehiculo()">Agregar</button>
       </div>
+    </div>
+
+    <div class="section">
+      <div class="row" style="flex-wrap:wrap">
+        <div style="flex:1;min-width:240px">
+          <label>Biblioteca de vehículos validados</label>
+          <select id="veh-bibliotecaSel" class="inp"></select>
+        </div>
+        <button id="veh-biblioteca-usar" class="btn secondary" onclick="importarVehiculoBiblioteca()">Usar en este proyecto</button>
+        <button id="veh-biblioteca-admin" class="btn ghost" onclick="abrirBiblioteca('vehiculos')">Administrar biblioteca</button>
+      </div>
+      <div class="note" id="veh-biblioteca-note">Reutiliza vehículos inspeccionados sin duplicar el registro.</div>
     </div>
 
     <div style="overflow:auto;margin-top:8px">
@@ -520,6 +548,18 @@ canvas{width:100%;height:300px;border-radius:8px}
     <div class="row"><h3>Editar Vehículo</h3><div class="spacer"></div><button class="btn ghost" onclick="cerrarModal('modal-vehiculo')">Cerrar</button></div>
     <div id="vehiculo-form"></div>
     <div class="sticky-actions"><button class="btn" onclick="cerrarModal('modal-vehiculo')">Cerrar</button></div>
+  </div>
+</div>
+<div class="modal" id="modal-biblioteca">
+  <div class="box">
+    <div class="row"><h3>Biblioteca maestra</h3><div class="spacer"></div><button class="btn ghost" onclick="cerrarModal('modal-biblioteca')">Cerrar</button></div>
+    <div class="chips" style="margin:10px 0">
+      <div class="chip active" data-tab="personal" onclick="setBibliotecaTab('personal')">Personal</div>
+      <div class="chip" data-tab="vehiculos" onclick="setBibliotecaTab('vehiculos')">Vehículos</div>
+    </div>
+    <div class="note" id="bib-summary"></div>
+    <div id="bib-personal-panel" class="section" style="margin-top:10px"></div>
+    <div id="bib-veh-panel" class="section" style="margin-top:10px;display:none"></div>
   </div>
 </div>
 
@@ -1608,10 +1648,322 @@ function ts(){
 }
 function uid(){return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));}
 
+function deepClone(obj){
+  return JSON.parse(JSON.stringify(obj||{}));
+}
+
+function formatLocalDateTime(iso){
+  if(!iso) return '—';
+  const date = new Date(iso);
+  if(Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString('es-BO', {hour12:false});
+}
+
+function ensureBibliotecaInCache(){
+  if(!DBCACHE[BIBLIOTECA_KEY]){
+    DBCACHE[BIBLIOTECA_KEY] = { personal:{}, vehiculos:{}, version:BIBLIOTECA_VERSION, updatedAt:null };
+  }else{
+    if(!DBCACHE[BIBLIOTECA_KEY].personal) DBCACHE[BIBLIOTECA_KEY].personal = {};
+    if(!DBCACHE[BIBLIOTECA_KEY].vehiculos) DBCACHE[BIBLIOTECA_KEY].vehiculos = {};
+  }
+  return DBCACHE[BIBLIOTECA_KEY];
+}
+
+function loadBibliotecaFromCache(){
+  const raw = ensureBibliotecaInCache();
+  BIBLIOTECA = {
+    personal: raw.personal || {},
+    vehiculos: raw.vehiculos || {},
+    version: raw.version || BIBLIOTECA_VERSION,
+    updatedAt: raw.updatedAt || raw.guardadoEn || null
+  };
+  renderBibliotecaSelects();
+}
+
+function persistBiblioteca(){
+  const cache = ensureBibliotecaInCache();
+  BIBLIOTECA.version = BIBLIOTECA.version || BIBLIOTECA_VERSION;
+  BIBLIOTECA.updatedAt = nowIso();
+  cache.personal = BIBLIOTECA.personal || {};
+  cache.vehiculos = BIBLIOTECA.vehiculos || {};
+  cache.version = BIBLIOTECA.version;
+  cache.updatedAt = BIBLIOTECA.updatedAt;
+  persistDB();
+  renderBibliotecaSelects();
+  const modal = document.getElementById('modal-biblioteca');
+  if(modal && modal.style.display==='flex'){
+    renderBibliotecaModal();
+  }
+}
+
+function renderBibliotecaSelects(){
+  const personalArr = Object.values(BIBLIOTECA.personal||{}).sort((a,b)=>{
+    return (a.nombre||'').localeCompare(b.nombre||'', 'es', {sensitivity:'base'});
+  });
+  const perSel = document.getElementById('per-bibliotecaSel');
+  if(perSel){
+    const opts = [`<option value="">— Seleccionar personal guardado —</option>`];
+    personalArr.forEach(p=>{
+      const cargo = p.cargo ? ` (${p.cargo})` : '';
+      const id = p.personaId || '';
+      opts.push(`<option value="${id}">${id?`${id} · `:''}${p.nombre||''}${cargo}</option>`);
+    });
+    perSel.innerHTML = opts.join('');
+    perSel.disabled = READONLY || !personalArr.length;
+  }
+  const perUse = document.getElementById('per-biblioteca-usar');
+  if(perUse) perUse.disabled = READONLY || !personalArr.length;
+  const perNote = document.getElementById('per-biblioteca-note');
+  if(perNote){
+    const base = perNote.dataset.base || perNote.textContent;
+    perNote.dataset.base = base;
+    const total = personalArr.length;
+    perNote.textContent = total ? `${base} Actualmente hay ${total} persona${total===1?'':'s'} guardada${total===1?'':'s'}.` : base;
+  }
+
+  const vehArr = Object.values(BIBLIOTECA.vehiculos||{}).sort((a,b)=>{
+    return (a.placa||a.vehiculoId||'').localeCompare(b.placa||b.vehiculoId||'', 'es', {sensitivity:'base'});
+  });
+  const vehSel = document.getElementById('veh-bibliotecaSel');
+  if(vehSel){
+    const opts = [`<option value="">— Seleccionar vehículo guardado —</option>`];
+    vehArr.forEach(v=>{
+      const marca = v.marca ? ` · ${v.marca}` : '';
+      const tipo = v.tipo ? ` · ${v.tipo}` : '';
+      const id = v.vehiculoId || '';
+      const placa = v.placa ? `${v.placa}` : '';
+      const label = [placa, marca && marca.trim(), tipo && tipo.trim()].filter(Boolean).join('');
+      opts.push(`<option value="${id}">${id?`${id} · `:''}${label || 'Sin datos'}</option>`);
+    });
+    vehSel.innerHTML = opts.join('');
+    vehSel.disabled = READONLY || !vehArr.length;
+  }
+  const vehUse = document.getElementById('veh-biblioteca-usar');
+  if(vehUse) vehUse.disabled = READONLY || !vehArr.length;
+  const vehNote = document.getElementById('veh-biblioteca-note');
+  if(vehNote){
+    const base = vehNote.dataset.base || vehNote.textContent;
+    vehNote.dataset.base = base;
+    const total = vehArr.length;
+    vehNote.textContent = total ? `${base} Actualmente hay ${total} vehículo${total===1?'':'s'} registrado${total===1?'':'s'}.` : base;
+  }
+}
+
+let bibliotecaTabActual = 'personal';
+function abrirBiblioteca(tab='personal'){
+  bibliotecaTabActual = tab;
+  renderBibliotecaModal();
+  const modal = document.getElementById('modal-biblioteca');
+  if(modal) modal.style.display='flex';
+}
+function setBibliotecaTab(tab){
+  bibliotecaTabActual = tab;
+  renderBibliotecaModal();
+}
+function renderBibliotecaModal(){
+  const modal = document.getElementById('modal-biblioteca');
+  if(!modal) return;
+  modal.querySelectorAll('.chip[data-tab]').forEach(chip=>{
+    chip.classList.toggle('active', chip.dataset.tab===bibliotecaTabActual);
+  });
+  const summary = document.getElementById('bib-summary');
+  if(summary){
+    const totalPer = Object.keys(BIBLIOTECA.personal||{}).length;
+    const totalVeh = Object.keys(BIBLIOTECA.vehiculos||{}).length;
+    const updated = BIBLIOTECA.updatedAt ? formatLocalDateTime(BIBLIOTECA.updatedAt) : '—';
+    summary.innerHTML = `<b>${totalPer}</b> persona${totalPer===1?'':'s'} y <b>${totalVeh}</b> vehículo${totalVeh===1?'':'s'} guardados. Última actualización: ${updated}.`;
+  }
+  const perPanel = document.getElementById('bib-personal-panel');
+  if(perPanel){
+    perPanel.style.display = bibliotecaTabActual==='personal' ? 'block' : 'none';
+    if(bibliotecaTabActual==='personal') perPanel.innerHTML = buildBibliotecaTable('personal');
+  }
+  const vehPanel = document.getElementById('bib-veh-panel');
+  if(vehPanel){
+    vehPanel.style.display = bibliotecaTabActual==='vehiculos' ? 'block' : 'none';
+    if(bibliotecaTabActual==='vehiculos') vehPanel.innerHTML = buildBibliotecaTable('vehiculos');
+  }
+}
+
+function buildBibliotecaTable(tipo){
+  const isPersonal = tipo==='personal';
+  const items = isPersonal ? (BIBLIOTECA.personal||{}) : (BIBLIOTECA.vehiculos||{});
+  const arr = Object.values(items);
+  if(!arr.length){
+    return `<div class="note">Aún no hay ${isPersonal?'personal':'vehículos'} guardados en la biblioteca.</div>`;
+  }
+  arr.sort((a,b)=>{
+    const aKey = isPersonal ? (a.nombre||'') : (a.placa||a.vehiculoId||'');
+    const bKey = isPersonal ? (b.nombre||'') : (b.placa||b.vehiculoId||'');
+    return aKey.localeCompare(bKey, 'es', {sensitivity:'base'});
+  });
+  const rows = arr.map(item=>{
+    const id = isPersonal ? (item.personaId||'') : (item.vehiculoId||'');
+    const meta = item.bibliotecaMeta || {};
+    const origenParts = [meta.origenEmpresa, meta.origenProyecto].filter(Boolean);
+    const origen = origenParts.length ? origenParts.join(' · ') : '—';
+    const responsable = meta.guardadoPor || '—';
+    const fecha = formatLocalDateTime(meta.guardadoEn);
+    const detalle = isPersonal
+      ? `${item.nombre||'Sin nombre'}${item.cargo?` · ${item.cargo}`:''}`
+      : `${item.placa||'Sin placa'}${item.marca?` · ${item.marca}`:''}${item.tipo?` · ${item.tipo}`:''}`;
+    const useFn = isPersonal ? 'importarPersonaBiblioteca' : 'importarVehiculoBiblioteca';
+    const useBtn = `<button class="btn small" ${READONLY?'disabled':''} onclick="${useFn}(${JSON.stringify(id)})">Usar en este proyecto</button>`;
+    const delBtn = `<button class="btn secondary small" ${READONLY?'disabled':''} onclick="eliminarBibliotecaItem('${tipo}', ${JSON.stringify(id)})">Eliminar</button>`;
+    return `<tr>
+      <td>${id}</td>
+      <td>
+        <div><b>${detalle}</b></div>
+        <div class="note">Actualizado: ${fecha} · Origen: ${origen} · Responsable: ${responsable}</div>
+      </td>
+      <td style="min-width:200px;display:flex;gap:6px;flex-wrap:wrap">${useBtn}${delBtn}</td>
+    </tr>`;
+  }).join('');
+  const headerId = isPersonal ? 'PersonaID' : 'VehiculoID';
+  return `<div style="overflow:auto"><table class="table"><thead><tr><th>${headerId}</th><th>Detalle</th><th>Acciones</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function guardarPersonaBiblioteca(idx){
+  const pr = proyectoActualPersonal();
+  const persona = pr.personal?.[idx];
+  if(!persona || READONLY) return;
+  if(!persona.personaId){
+    alert('Asigna un PersonaID antes de guardar en la biblioteca.');
+    return;
+  }
+  const clave = document.querySelector('#per-empresaSel')?.value || '';
+  const pid = document.querySelector('#per-proyectoSel')?.value || '';
+  const clone = deepClone(persona);
+  clone.visible = true;
+  clone.bibliotecaMeta = {
+    guardadoEn: nowIso(),
+    guardadoPor: USUARIO?.correo || USUARIO?.nombre || '—',
+    origenEmpresa: clave,
+    origenProyecto: pid
+  };
+  BIBLIOTECA.personal[persona.personaId] = clone;
+  persistBiblioteca();
+}
+
+function importarPersonaBiblioteca(forcedId){
+  if(READONLY) return;
+  const clave = document.querySelector('#per-empresaSel')?.value;
+  const pid = document.querySelector('#per-proyectoSel')?.value;
+  if(!clave || !pid){
+    alert('Selecciona una empresa y un proyecto antes de importar personal.');
+    return;
+  }
+  const sel = document.getElementById('per-bibliotecaSel');
+  const personaId = forcedId || sel?.value;
+  if(!personaId){
+    alert('Selecciona un registro de la biblioteca.');
+    return;
+  }
+  const base = BIBLIOTECA.personal?.[personaId];
+  if(!base){
+    alert('No se encontró la persona seleccionada en la biblioteca.');
+    return;
+  }
+  const pr = ensureProyecto(clave, pid);
+  const clone = deepClone(base);
+  clone.visible = true;
+  const idx = (pr.personal||[]).findIndex(p=>p.personaId===personaId);
+  if(idx>=0){
+    pr.personal[idx] = clone;
+  }else{
+    pr.personal = pr.personal || [];
+    pr.personal.push(clone);
+  }
+  logProyecto(clave,pid);
+  persistPersonal();
+  syncLs025FromPersona();
+  renderTablaPersonal();
+  renderDashboard();
+  renderResumen();
+  buildLs025();
+  if(!forcedId && sel) sel.value='';
+}
+
+function guardarVehiculoBiblioteca(idx){
+  const pr = proyectoActualVeh();
+  const veh = pr.vehiculos?.[idx];
+  if(!veh || READONLY) return;
+  if(!veh.vehiculoId){
+    alert('Asigna un VehiculoID antes de guardar en la biblioteca.');
+    return;
+  }
+  const clave = document.querySelector('#veh-empresaSel')?.value || '';
+  const pid = document.querySelector('#veh-proyectoSel')?.value || '';
+  const clone = deepClone(veh);
+  clone.visible = true;
+  clone.bibliotecaMeta = {
+    guardadoEn: nowIso(),
+    guardadoPor: USUARIO?.correo || USUARIO?.nombre || '—',
+    origenEmpresa: clave,
+    origenProyecto: pid
+  };
+  BIBLIOTECA.vehiculos[veh.vehiculoId] = clone;
+  persistBiblioteca();
+}
+
+function importarVehiculoBiblioteca(forcedId){
+  if(READONLY) return;
+  const clave = document.querySelector('#veh-empresaSel')?.value;
+  const pid = document.querySelector('#veh-proyectoSel')?.value;
+  if(!clave || !pid){
+    alert('Selecciona una empresa y un proyecto antes de importar vehículos.');
+    return;
+  }
+  const sel = document.getElementById('veh-bibliotecaSel');
+  const vehiculoId = forcedId || sel?.value;
+  if(!vehiculoId){
+    alert('Selecciona un vehículo guardado.');
+    return;
+  }
+  const base = BIBLIOTECA.vehiculos?.[vehiculoId];
+  if(!base){
+    alert('No se encontró el vehículo seleccionado en la biblioteca.');
+    return;
+  }
+  const pr = ensureProyecto(clave, pid);
+  const clone = deepClone(base);
+  clone.visible = true;
+  const idx = (pr.vehiculos||[]).findIndex(v=>v.vehiculoId===vehiculoId);
+  if(idx>=0){
+    pr.vehiculos[idx] = clone;
+  }else{
+    pr.vehiculos = pr.vehiculos || [];
+    pr.vehiculos.push(clone);
+  }
+  logProyecto(clave,pid);
+  persistVehiculos();
+  syncLs025FromVehiculo();
+  renderTablaVehiculos();
+  renderDashboard();
+  renderResumen();
+  buildLs025();
+  if(!forcedId && sel) sel.value='';
+}
+
+function eliminarBibliotecaItem(tipo, id){
+  if(READONLY) return;
+  if(!confirm('¿Eliminar este registro de la biblioteca maestra?')) return;
+  if(tipo==='personal'){
+    delete BIBLIOTECA.personal[id];
+  }else{
+    delete BIBLIOTECA.vehiculos[id];
+  }
+  persistBiblioteca();
+}
+
+const BIBLIOTECA_KEY = '_biblioteca';
+const BIBLIOTECA_VERSION = 1;
 let DBCACHE = {}; // { [empresaClave]: { empresa:{...}, proyectos:{ [proyectoId]: {proyecto, ls025, personal, vehiculos, updatedAt} } } }
-const RESERVED_EMPRESAS = ["geminikeys","historial","sistema-1"]; // claves que no deben mostrarse en dashboard
+const RESERVED_EMPRESAS = ["geminikeys","historial","sistema-1", BIBLIOTECA_KEY.toLowerCase()]; // claves que no deben mostrarse en dashboard
+let BIBLIOTECA = { personal:{}, vehiculos:{}, version:BIBLIOTECA_VERSION, updatedAt:null };
 function empresaKeys(){
   return Object.keys(DBCACHE).filter(k=>{
+    if(k===BIBLIOTECA_KEY) return false;
     if(RESERVED_EMPRESAS.includes(k.toLowerCase())) return false;
     const emp = DBCACHE[k];
     const nombre = emp?.empresa?.datos?.empresa || emp?.empresa?.nombre;
@@ -1757,6 +2109,7 @@ function obtenerHistorialProyecto(nombre){
 function cargarDatosDesdeFirebase(){
   if (!database) {
     DBCACHE = JSON.parse(localStorage.getItem("dbCacheV4")||"{}" );
+    loadBibliotecaFromCache();
     renderDashboard();
     refreshSelectorsAll();
     refreshEmpresaList();
@@ -1771,6 +2124,7 @@ function cargarDatosDesdeFirebase(){
       // Merge remote snapshot with any local changes to avoid losing
       // recently added companies before the download completes
       DBCACHE = { ...data, ...DBCACHE };
+      loadBibliotecaFromCache();
       console.log("Datos descargados desde Firebase.");
       // Persist the merged cache so the remote database keeps new entries
       persistDB();
@@ -2274,6 +2628,25 @@ function ingest(obj){
       pr.updatedAt = obj.capturadoEn || nowIso();
       return;
     }
+    if(obj.schema === "ypfb.crm.v4.biblioteca"){
+      BIBLIOTECA = {
+        personal: obj.personal || {},
+        vehiculos: obj.vehiculos || {},
+        version: obj.version || BIBLIOTECA_VERSION,
+        updatedAt: obj.updatedAt || obj.actualizadoEn || obj.guardadoEn || nowIso()
+      };
+      DBCACHE[BIBLIOTECA_KEY] = {
+        personal: BIBLIOTECA.personal,
+        vehiculos: BIBLIOTECA.vehiculos,
+        version: BIBLIOTECA.version,
+        updatedAt: BIBLIOTECA.updatedAt
+      };
+      persistDB();
+      renderBibliotecaSelects();
+      const modal = document.getElementById('modal-biblioteca');
+      if(modal && modal.style.display==='flex') renderBibliotecaModal();
+      return;
+    }
 
     // Compatibilidad v3
     if(obj.schema === "ypfb.crm.snapshot"){
@@ -2361,18 +2734,20 @@ function estadoLS(ls){
   return pickGlobal(a,b,c);
 }
 function estadoPersonal(arr){
-  if(!arr || !arr.length) return "SIN PERSONAL";
+  const visibles = (arr||[]).filter(p=>p.visible!==false);
+  if(!visibles.length) return "SIN PERSONAL";
   const vals=[];
-  arr.forEach(p=>{
+  visibles.forEach(p=>{
     Object.values(p.requisitos||{}).forEach(v=>{ if(v && v!=='NA') vals.push(v); });
     (p.guiasMedicas||[]).forEach(g=> Object.values(g.items||{}).forEach(v=>{ if(v && v!=='NA') vals.push(v); }));
   });
   return computeEstadoRapido_SPN(vals);
 }
 function estadoVehiculos(arr){
-  if(!arr || !arr.length) return "SIN VEHICULO";
+  const visibles = (arr||[]).filter(v=>v.visible!==false);
+  if(!visibles.length) return "SIN VEHICULO";
   const vals=[];
-  arr.forEach(v=> Object.values(v.requisitos||{}).forEach(x=>{ if(x && x!=='NA') vals.push(x); }) );
+  visibles.forEach(v=> Object.values(v.requisitos||{}).forEach(x=>{ if(x && x!=='NA') vals.push(x); }) );
   return computeEstadoRapido_SPN(vals);
 }
 function calcularEstados(pr){
@@ -2380,10 +2755,12 @@ function calcularEstados(pr){
   const estSST = tipos.includes('CI') ? estadoLSSST(pr.ls025) : 'NO APLICA';
   const estMA  = tipos.includes('CI') ? estadoLSMA(pr.ls025)  : 'NO APLICA';
   const estRSE = tipos.includes('CI') ? estadoLSRSE(pr.ls025) : 'NO APLICA';
-  const hasPer = tipos.includes('HP') || (pr.personal && pr.personal.length);
-  const hasVeh = tipos.includes('HV') || (pr.vehiculos && pr.vehiculos.length);
-  const estPer = hasPer ? estadoPersonal(pr.personal) : 'NO APLICA';
-  const estVeh = hasVeh ? estadoVehiculos(pr.vehiculos) : 'NO APLICA';
+  const personalVis = (pr.personal||[]).filter(p=>p.visible!==false);
+  const vehiculosVis = (pr.vehiculos||[]).filter(v=>v.visible!==false);
+  const hasPer = tipos.includes('HP') || personalVis.length;
+  const hasVeh = tipos.includes('HV') || vehiculosVis.length;
+  const estPer = hasPer ? estadoPersonal(personalVis) : 'NO APLICA';
+  const estVeh = hasVeh ? estadoVehiculos(vehiculosVis) : 'NO APLICA';
   const estLS  = tipos.includes('CI') ? pickGlobal(estSST, estMA, estRSE) : 'NO APLICA';
   const est    = pickGlobal(estLS, estPer, estVeh);
   return {estSST, estMA, estRSE, estPer, estVeh, estLS, est};
@@ -2747,11 +3124,11 @@ function drawAllCharts(){
     const emp=DBCACHE[clave];
     Object.values(emp.proyectos||{}).forEach(pr=>{
       (pr.ls025?.respuestas||[]).forEach(r=>{ if(r.valor==="N") n++; });
-      (pr.personal||[]).forEach(p=>{
+      (pr.personal||[]).filter(p=>p.visible!==false).forEach(p=>{
         Object.values(p.requisitos||{}).forEach(v=>{ if(v==="N") n++; });
         (p.guiasMedicas||[]).forEach(g=>Object.values(g.items||{}).forEach(v=>{ if(v==="N") n++; }));
       });
-      (pr.vehiculos||[]).forEach(v=> Object.values(v.requisitos||{}).forEach(x=>{ if(x==="N") n++; }));
+      (pr.vehiculos||[]).filter(v=>v.visible!==false).forEach(v=> Object.values(v.requisitos||{}).forEach(x=>{ if(x==="N") n++; }));
     });
     const name = emp.empresa?.datos?.empresa || emp.empresa?.nombre || clave;
     counts.push({name, n});
@@ -3097,7 +3474,7 @@ function autoLs025FromPersonal(code){
   const clave=$("#per-empresaSel").value;
   const pid=$("#per-proyectoSel").value;
   const pr = proyectoActualPersonal();
-  const personas = pr.personal || [];
+  const personas = (pr.personal || []).filter(p=>p.visible!==false);
   let allS = personas.length>0;
   let anyN = false;
   const comentarios=[];
@@ -3127,7 +3504,7 @@ function autoLs025FromVeh(code){
   const clave=$("#veh-empresaSel").value;
   const pid=$("#veh-proyectoSel").value;
   const pr = proyectoActualVeh();
-  const vehiculos = pr.vehiculos || [];
+  const vehiculos = (pr.vehiculos || []).filter(v=>v.visible!==false);
   let allS = vehiculos.length>0;
   let anyN = false;
   const comentarios=[];
@@ -3173,7 +3550,7 @@ function agregarPersona(){
   const nombre=$("#per-nombre").value.trim(); const cargo=$("#per-cargo").value.trim();
   const personaId=$("#per-id").value.trim()||("PER-"+Math.floor(Math.random()*9000+1000));
   if(!nombre){ alert("Ingrese el nombre"); return; }
-  pr.personal.push({personaId,nombre,cargo,requisitos:{},guiasMedicas:[],comentarios:""});
+  pr.personal.push({personaId,nombre,cargo,requisitos:{},guiasMedicas:[],comentarios:"",visible:true});
 
   const clave=$("#per-empresaSel").value, pid=$("#per-proyectoSel").value;
   logProyecto(clave,pid);
@@ -3184,11 +3561,17 @@ function agregarPersona(){
   renderDashboard();
 }
 function renderTablaPersonal(){
+  renderBibliotecaSelects();
   const pr = proyectoActualPersonal();
   $("#per-nombre").disabled=READONLY; $("#per-cargo").disabled=READONLY; $("#per-id").disabled=READONLY;
-  const addBtn=$("#panel-personal .section .row button"); if(addBtn) addBtn.disabled=READONLY;
+  const addBtn=$("#per-add-btn"); if(addBtn) addBtn.disabled=READONLY;
+  const perSel=document.getElementById('per-bibliotecaSel');
+  if(perSel) perSel.disabled = READONLY || !Object.keys(BIBLIOTECA.personal||{}).length;
+  const perUse=document.getElementById('per-biblioteca-usar');
+  if(perUse) perUse.disabled = READONLY || !Object.keys(BIBLIOTECA.personal||{}).length;
   const tb=$("#tabla-personal tbody"); tb.innerHTML="";
   (pr.personal||[]).forEach((p,idx)=>{
+    const isVisible = p.visible !== false;
     const reqVals = Object.values(p.requisitos||{}).filter(v=>v && v!=='NA');
     const guiaVals = [];
     (p.guiasMedicas||[]).forEach(g=> Object.values(g.items||{}).forEach(v=>{ if(v && v!=='NA') guiaVals.push(v); }));
@@ -3203,16 +3586,22 @@ function renderTablaPersonal(){
       })
       .map(g=>g.perfil.replaceAll('_',' ')).join(", ");
     const tr = document.createElement("tr");
-    const acciones = READONLY?"":`<button class="btn small" onclick="editarPersona(${idx})">Editar</button> <button class="btn secondary small" onclick="eliminarPersona(${idx})">Eliminar</button>`;
+    if(!isVisible) tr.classList.add("row-hidden");
+    const estado = isVisible ? "" : ` <span class="badge muted">Oculto</span>`;
+    const libraryBadge = p.bibliotecaMeta ? ` <span class="badge info">Biblioteca</span>` : "";
+    const toggleTitle = isVisible ? "Ocultar de la validación" : "Mostrar y considerar";
+    const toggleIcon = isVisible ? "👁️" : "🙈";
+    const toggleBtn = `<button class="btn ghost small icon" ${READONLY?'disabled':''} onclick="togglePersonaVisible(${idx})" title="${toggleTitle}">${toggleIcon}</button>`;
+    const saveBtn = `<button class="btn ghost small icon" ${READONLY?'disabled':''} onclick="guardarPersonaBiblioteca(${idx})" title="Guardar/actualizar en biblioteca maestra">📥</button>`;
+    const acciones = READONLY?`${toggleBtn} ${saveBtn}`:`${toggleBtn} ${saveBtn} <button class="btn small" onclick="editarPersona(${idx})">Editar</button><button class="btn secondary small" onclick="eliminarPersona(${idx})">Eliminar</button>`;
     tr.innerHTML = `
-      <td>${p.personaId}</td><td>${p.nombre}</td><td>${p.cargo||""}</td><td>${fs}</td><td>${apto||"-"}</td>
+      <td>${p.personaId}</td><td>${p.nombre}${estado}${libraryBadge}</td><td>${p.cargo||""}</td><td>${fs}</td><td>${apto||"-"}</td>
       <td><span class="badge ${perc===100?'ok':(perc>=60?'warn':'err')}">${perc}%</span></td>
       <td>${acciones}</td>`;
     tb.appendChild(tr);
   });
-  }
-
-  function updateNuevoProyectoBtn(){
+}
+function updateNuevoProyectoBtn(){
   const btn = document.getElementById('btn-nuevo-proyecto');
   if(!btn) return;
   const clave = $("#emp-clave").value.trim();
@@ -3230,6 +3619,22 @@ function eliminarPersona(idx){
   logProyecto(clave,pid);
 
   persistPersonal();
+}
+function togglePersonaVisible(idx){
+  const pr = proyectoActualPersonal();
+  const persona = pr.personal?.[idx];
+  if(!persona || READONLY) return;
+  persona.visible = persona.visible===false ? true : false;
+
+  const clave=$("#per-empresaSel").value, pid=$("#per-proyectoSel").value;
+  logProyecto(clave,pid);
+
+  syncLs025FromPersona();
+  persistPersonal();
+  renderTablaPersonal();
+  renderDashboard();
+  renderResumen();
+  buildLs025();
 }
 function editarPersona(idx){
   if(READONLY) return;
@@ -3405,7 +3810,7 @@ function agregarVehiculo(){
   const placa=$("#veh-placa").value.trim(); if(!placa){ alert("Ingrese la placa"); return; }
   const vehiculoId=$("#veh-id").value.trim()||("VEH-"+placa.replace(/[^A-Za-z0-9]/g,"").toUpperCase());
   const marca=$("#veh-marca").value.trim(); const tipo=$("#veh-tipo").value.trim();
-  pr.vehiculos.push({vehiculoId, placa, marca, tipo, requisitos:{}, comentarios:""});
+  pr.vehiculos.push({vehiculoId, placa, marca, tipo, requisitos:{}, comentarios:"", visible:true});
 
   const clave=$("#veh-empresaSel").value, pid=$("#veh-proyectoSel").value;
   logProyecto(clave,pid);
@@ -3416,18 +3821,31 @@ function agregarVehiculo(){
   renderDashboard();
 }
 function renderTablaVehiculos(){
+  renderBibliotecaSelects();
   const pr = proyectoActualVeh();
   $("#veh-placa").disabled=READONLY; $("#veh-marca").disabled=READONLY; $("#veh-tipo").disabled=READONLY; $("#veh-id").disabled=READONLY;
-  const addBtn=$("#panel-vehiculos .section .row button"); if(addBtn) addBtn.disabled=READONLY;
+  const addBtn=$("#veh-add-btn"); if(addBtn) addBtn.disabled=READONLY;
+  const vehSel=document.getElementById('veh-bibliotecaSel');
+  if(vehSel) vehSel.disabled = READONLY || !Object.keys(BIBLIOTECA.vehiculos||{}).length;
+  const vehUse=document.getElementById('veh-biblioteca-usar');
+  if(vehUse) vehUse.disabled = READONLY || !Object.keys(BIBLIOTECA.vehiculos||{}).length;
   const tb=$("#tabla-vehiculos tbody"); tb.innerHTML="";
   (pr.vehiculos||[]).forEach((v,idx)=>{
+    const isVisible = v.visible !== false;
     const vals=Object.values(v.requisitos||{}).filter(x=>x && x!=='NA');
     const done=vals.filter(x=>x==="S").length;
     const perc=Math.round((done/Math.max(1,vals.length))*100);
     const tr=document.createElement("tr");
-    const acciones = READONLY?"":`<button class="btn small" onclick="editarVehiculo(${idx})">Editar</button> <button class="btn secondary small" onclick="eliminarVehiculo(${idx})">Eliminar</button>`;
+    if(!isVisible) tr.classList.add("row-hidden");
+    const estado = isVisible ? "" : ` <span class="badge muted">Oculto</span>`;
+    const libraryBadge = v.bibliotecaMeta ? ` <span class="badge info">Biblioteca</span>` : "";
+    const toggleTitle = isVisible ? "Ocultar de la validación" : "Mostrar y considerar";
+    const toggleIcon = isVisible ? "👁️" : "🙈";
+    const toggleBtn = `<button class="btn ghost small icon" ${READONLY?'disabled':''} onclick="toggleVehiculoVisible(${idx})" title="${toggleTitle}">${toggleIcon}</button>`;
+    const saveBtn = `<button class="btn ghost small icon" ${READONLY?'disabled':''} onclick="guardarVehiculoBiblioteca(${idx})" title="Guardar/actualizar en biblioteca maestra">📥</button>`;
+    const acciones = READONLY?`${toggleBtn} ${saveBtn}`:`${toggleBtn} ${saveBtn} <button class="btn small" onclick="editarVehiculo(${idx})">Editar</button> <button class="btn secondary small" onclick="eliminarVehiculo(${idx})">Eliminar</button>`;
     tr.innerHTML = `
-      <td>${v.vehiculoId}</td><td>${v.placa}</td><td>${v.marca||""}</td><td>${v.tipo||""}</td>
+      <td>${v.vehiculoId}</td><td>${v.placa}${estado}${libraryBadge}</td><td>${v.marca||""}</td><td>${v.tipo||""}</td>
       <td><span class="badge ${perc===100?'ok':(perc>=60?'warn':'err')}">${perc}%</span></td>
       <td>${acciones}</td>`;
     tb.appendChild(tr);
@@ -3442,6 +3860,22 @@ function eliminarVehiculo(idx){
   logProyecto(clave,pid);
 
   persistVehiculos();
+}
+function toggleVehiculoVisible(idx){
+  const pr = proyectoActualVeh();
+  const vehiculo = pr.vehiculos?.[idx];
+  if(!vehiculo || READONLY) return;
+  vehiculo.visible = vehiculo.visible===false ? true : false;
+
+  const clave=$("#veh-empresaSel").value, pid=$("#veh-proyectoSel").value;
+  logProyecto(clave,pid);
+
+  syncLs025FromVehiculo();
+  persistVehiculos();
+  renderTablaVehiculos();
+  renderDashboard();
+  renderResumen();
+  buildLs025();
 }
 function editarVehiculo(idx){
   if(READONLY) return;
@@ -3576,7 +4010,9 @@ function buildPdfHtml(clave,pid){
     return `<table><thead><tr><th>ID</th><th>Requisito</th><th>S/N/NA</th><th>Comentario</th></tr></thead><tbody>${rows}</tbody></table>`;
   };
   const tablePer = ()=>{
-    const rows = (snap.personal||[]).map(p=>{
+    const personalVis = (snap.personal||[]).filter(p=>p.visible!==false);
+    const hidden = (snap.personal||[]).length - personalVis.length;
+    const rows = personalVis.map(p=>{
       let bad=[]; Object.entries(p.requisitos||{}).forEach(([k,v])=>{ if(v==="N") bad.push(k); });
       (p.guiasMedicas||[]).forEach(g=> Object.entries(g.items||{}).forEach(([k,v])=>{ if(v==="N") bad.push(k); }));
       const fs = (p.requisitos||{}).P_RIESGO_FS100 || '';
@@ -3588,16 +4024,20 @@ function buildPdfHtml(clave,pid){
         .map(g=>g.perfil.replaceAll('_',' ')).join(", ");
       return `<tr><td>${p.nombre}</td><td>${p.cargo||''}</td><td>${fs}</td><td>${apto}</td><td>${bad.join(", ")}</td></tr>`;
     }).join("") || "<tr><td colspan='5'>Sin personal</td></tr>";
-    return `<table><thead><tr><th>Persona</th><th>Cargo</th><th>FS100</th><th>Apto</th><th>Observaciones (NO)</th></tr></thead><tbody>${rows}</tbody></table>`;
+    const note = hidden>0 ? `<div style="font-size:12px;color:#555;margin:6px 0;">${hidden} persona(s) ocultas.</div>` : "";
+    return `${note}<table><thead><tr><th>Persona</th><th>Cargo</th><th>FS100</th><th>Apto</th><th>Observaciones (NO)</th></tr></thead><tbody>${rows}</tbody></table>`;
   };
   const tableVeh = ()=>{
-    const rows = (snap.vehiculos||[]).map(v=>{
+    const vehVis = (snap.vehiculos||[]).filter(v=>v.visible!==false);
+    const hidden = (snap.vehiculos||[]).length - vehVis.length;
+    const rows = vehVis.map(v=>{
       const vals = Object.values(v.requisitos||{}).filter(x=>x && x!=='NA');
       const bad = Object.entries(v.requisitos||{}).filter(([k,val])=>val==="N").map(([k])=>k).join(", ");
       const est = computeEstadoRapido_SPN(vals);
       return `<tr><td>${v.placa}</td><td>${(v.marca||'')+' '+(v.tipo||'')}</td><td>${est}</td><td>${bad}</td></tr>`;
     }).join("") || "<tr><td colspan='4'>Sin vehículos</td></tr>";
-    return `<table><thead><tr><th>Placa</th><th>Marca/Tipo</th><th>Estado</th><th>Observaciones (NO)</th></tr></thead><tbody>${rows}</tbody></table>`;
+    const note = hidden>0 ? `<div style="font-size:12px;color:#555;margin:6px 0;">${hidden} vehículo(s) ocultos.</div>` : "";
+    return `${note}<table><thead><tr><th>Placa</th><th>Marca/Tipo</th><th>Estado</th><th>Observaciones (NO)</th></tr></thead><tbody>${rows}</tbody></table>`;
   };
   const tableEnt = ()=>{
     const hist = (snap.historial||[])
@@ -3699,6 +4139,10 @@ function renderResumen(){
   const snap = buildSnapshot(clave,pid);
   const totalLS=CATALOG_LS025.length; let s=0;
   (snap.ls025?.respuestas||[]).forEach(r=>{ if(r.valor==="S") s++; });
+  const personalVisible = (snap.personal||[]).filter(p=>p.visible!==false);
+  const vehiculosVisibles = (snap.vehiculos||[]).filter(v=>v.visible!==false);
+  const perOcultos = (snap.personal||[]).length - personalVisible.length;
+  const vehOcultos = (snap.vehiculos||[]).length - vehiculosVisibles.length;
   const histEnt = (snap.historial||[]).filter(h=>h.accion==="Recibido" || h.accion==="Devolución");
   const histVer = (snap.historial||[]).filter(h=>h.accion!=="Recibido" && h.accion!=="Devolución");
   let revEnt=0,lastEnt=0;
@@ -3751,8 +4195,8 @@ function renderResumen(){
       <div>Empresa: <b>${snap.empresa?.datos?.empresa || snap.empresa?.nombre || clave}</b></div>
       <div>Proyecto: <b>${snap.proyecto?.proyectoId||pid}</b></div>
       <div>LS.025 (S): <b>${s}/${totalLS}</b></div>
-      <div>Personal: <b>${(snap.personal||[]).length}</b></div>
-      <div>Vehículos: <b>${(snap.vehiculos||[]).length}</b></div>
+      <div>Personal: <b>${personalVisible.length}</b>${perOcultos>0?` <span class="note">(${perOcultos} ocultos)</span>`:""}</div>
+      <div>Vehículos: <b>${vehiculosVisibles.length}</b>${vehOcultos>0?` <span class="note">(${vehOcultos} ocultos)</span>`:""}</div>
     </div>
       <div class="section" style="margin-top:10px">
         <h4>Recepción / Devolución</h4>
@@ -3945,6 +4389,7 @@ function refreshSelectorsAll(){
   refreshSelectors("#per-empresaSel","#per-proyectoSel");
   refreshSelectors("#veh-empresaSel","#veh-proyectoSel");
   refreshSelectors("#res-empresaSel","#res-proyectoSel");
+  renderBibliotecaSelects();
   buildLs025(); renderTablaPersonal(); renderTablaVehiculos(); renderResumen();
 }
 
@@ -3967,7 +4412,8 @@ $$(".tab").forEach(t=> t.addEventListener("click", ()=> switchTab(t.dataset.tab)
 /* ================== Limpieza de cache ================== */
 function limpiarCache(){
   if(!confirm("¿Limpiar cache local?")) return;
-  DBCACHE={}; CURRENT={}; localStorage.removeItem("dbCacheV4"); localStorage.removeItem("currentV4");
+  DBCACHE={}; CURRENT={}; BIBLIOTECA = { personal:{}, vehiculos:{}, version:BIBLIOTECA_VERSION, updatedAt:null };
+  localStorage.removeItem("dbCacheV4"); localStorage.removeItem("currentV4");
   const tag=document.getElementById("db-json"); if(tag) tag.textContent="{}";
   renderDashboard(); refreshSelectorsAll(); renderYPFB();
 }
