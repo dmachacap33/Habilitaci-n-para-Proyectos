@@ -70,7 +70,9 @@ textarea{min-height:80px;resize:vertical}
 .badge.warn{background:rgba(234,179,8,.15);color:var(--warn)}
 .badge.err{background:rgba(239,68,68,.15);color:var(--err)}
 .badge.muted{background:rgba(100,116,139,.2);color:#475569}
+
 .badge.info{background:rgba(59,130,246,.18);color:var(--brand)}
+
 .table tr.row-hidden{opacity:.55}
 .aprob-banner{padding:6px;margin-top:10px;text-align:center;font-weight:bold;border:2px solid}
 .aprob-banner.ok{border-color:var(--ok);color:var(--ok)}
@@ -3588,6 +3590,7 @@ function renderTablaPersonal(){
     const tr = document.createElement("tr");
     if(!isVisible) tr.classList.add("row-hidden");
     const estado = isVisible ? "" : ` <span class="badge muted">Oculto</span>`;
+
     const libraryBadge = p.bibliotecaMeta ? ` <span class="badge info">Biblioteca</span>` : "";
     const toggleTitle = isVisible ? "Ocultar de la validación" : "Mostrar y considerar";
     const toggleIcon = isVisible ? "👁️" : "🙈";
@@ -3596,11 +3599,13 @@ function renderTablaPersonal(){
     const acciones = READONLY?`${toggleBtn} ${saveBtn}`:`${toggleBtn} ${saveBtn} <button class="btn small" onclick="editarPersona(${idx})">Editar</button><button class="btn secondary small" onclick="eliminarPersona(${idx})">Eliminar</button>`;
     tr.innerHTML = `
       <td>${p.personaId}</td><td>${p.nombre}${estado}${libraryBadge}</td><td>${p.cargo||""}</td><td>${fs}</td><td>${apto||"-"}</td>
+
       <td><span class="badge ${perc===100?'ok':(perc>=60?'warn':'err')}">${perc}%</span></td>
       <td>${acciones}</td>`;
     tb.appendChild(tr);
   });
 }
+
 function updateNuevoProyectoBtn(){
   const btn = document.getElementById('btn-nuevo-proyecto');
   if(!btn) return;
@@ -3838,6 +3843,7 @@ function renderTablaVehiculos(){
     const tr=document.createElement("tr");
     if(!isVisible) tr.classList.add("row-hidden");
     const estado = isVisible ? "" : ` <span class="badge muted">Oculto</span>`;
+
     const libraryBadge = v.bibliotecaMeta ? ` <span class="badge info">Biblioteca</span>` : "";
     const toggleTitle = isVisible ? "Ocultar de la validación" : "Mostrar y considerar";
     const toggleIcon = isVisible ? "👁️" : "🙈";
@@ -3846,6 +3852,7 @@ function renderTablaVehiculos(){
     const acciones = READONLY?`${toggleBtn} ${saveBtn}`:`${toggleBtn} ${saveBtn} <button class="btn small" onclick="editarVehiculo(${idx})">Editar</button> <button class="btn secondary small" onclick="eliminarVehiculo(${idx})">Eliminar</button>`;
     tr.innerHTML = `
       <td>${v.vehiculoId}</td><td>${v.placa}${estado}${libraryBadge}</td><td>${v.marca||""}</td><td>${v.tipo||""}</td>
+
       <td><span class="badge ${perc===100?'ok':(perc>=60?'warn':'err')}">${perc}%</span></td>
       <td>${acciones}</td>`;
     tb.appendChild(tr);
