@@ -1523,6 +1523,7 @@ const storedSheetUrl = localStorage.getItem('sheetWebAppUrl');
 if(storedSheetUrl) SHEET_WEBAPP_URL = storedSheetUrl;
 let EXPORT_DIR_HANDLE = null;
 const DB_NAME = "ypfb-crm-db-v4"; const STORE = "fs";
+const BANNER_OK_STATES = new Set(["APROBADO","NO APLICA","SIN PERSONAL","SIN VEHICULO"]);
 function idbOpen(){return new Promise((res,rej)=>{const req = indexedDB.open(DB_NAME,1);req.onupgradeneeded=e=>e.target.result.createObjectStore(STORE);req.onsuccess=e=>res(e.target.result);req.onerror=e=>rej(e.target.error);});}
 async function idbSet(k,v){const db=await idbOpen();return new Promise((res,rej)=>{const tx=db.transaction(STORE,"readwrite");tx.objectStore(STORE).put(v,k);tx.oncomplete=()=>res();tx.onerror=e=>rej(e.target.error);});}
 async function idbGet(k){const db=await idbOpen();return new Promise((res,rej)=>{const tx=db.transaction(STORE,"readonly");const rq=tx.objectStore(STORE).get(k);rq.onsuccess=()=>res(rq.result);rq.onerror=e=>rej(e.target.error);});}
@@ -2566,15 +2567,135 @@ function drawDonut(canvas, aprob, parcial, observ){
   ctx.fillStyle="#1e293b"; ctx.textAlign="center"; ctx.font="700 18px system-ui"; ctx.fillText(`A:${aprob} P:${parcial} O:${observ}`, cx, cy+6);
 }
 function drawRespChart(canvas, labels, values){
+  const padTop=36, padBottom=36, padRight=40;
+  const minRow=34;
+  const desiredHeight=Math.max(padTop + padBottom + labels.length*minRow, 300);
+  if(canvas.height !== desiredHeight){ canvas.height = desiredHeight; }
   const ctx=canvas.getContext("2d"); const W=canvas.width, H=canvas.height; ctx.clearRect(0,0,W,H);
-  const pad=40; const max=Math.max(1, ...values); const rowH=(H-pad*2)/Math.max(1,labels.length);
-  labels.forEach((l,i)=>{
-    const y = pad + i*rowH;
-    const w = (W-pad*2)*(values[i]/max);
-    ctx.fillStyle="#3b82f6"; if(values[i]>0) ctx.fillRect(pad, y+6, w, rowH*0.5);
-    ctx.fillStyle="#1e293b"; ctx.font="14px system-ui"; ctx.textAlign="left";
-    ctx.fillText(`${l} — ${values[i]}`, pad+4, y);
+
+  const padLeft=Math.max(120, Math.min(260, W*0.42));
+  const rowBgX=Math.max(16, padLeft-180);
+  const rowBgWidth=Math.max(0, W-rowBgX-padRight);
+  const barMaxWidth=Math.max(0, W-padLeft-padRight);
+
+  const bgGradient=ctx.createLinearGradient(0,0,0,H);
+  bgGradient.addColorStop(0,"#f8fbff");
+  bgGradient.addColorStop(1,"#eef4ff");
+  ctx.fillStyle=bgGradient;
+  ctx.fillRect(0,0,W,H);
+
+  const max=Math.max(1, ...values);
+  const rowCount=Math.max(1, labels.length);
+  const rowH=(H-padTop-padBottom)/rowCount;
+  const baseFont="600 13px 'Inter', system-ui";
+  const valueFont="600 12px 'Inter', system-ui";
+
+  ctx.textBaseline="middle";
+  ctx.textAlign="left";
+  ctx.font=baseFont;
+
+  function fillRoundedRect(x,y,w,h,r,color){
+    if(w<=0 || h<=0) return;
+    const radius=Math.min(r, h/2, w/2);
+    ctx.beginPath();
+    ctx.moveTo(x+radius,y);
+    ctx.lineTo(x+w-radius,y);
+    ctx.quadraticCurveTo(x+w,y,x+w,y+radius);
+    ctx.lineTo(x+w,y+h-radius);
+    ctx.quadraticCurveTo(x+w,y+h,x+w-radius,y+h);
+    ctx.lineTo(x+radius,y+h);
+    ctx.quadraticCurveTo(x,y+h,x,y+h-radius);
+    ctx.lineTo(x,y+radius);
+    ctx.quadraticCurveTo(x,y,x+radius,y);
+    ctx.closePath();
+    ctx.fillStyle=color;
+    ctx.fill();
+  }
+
+  function fitLabel(text, maxWidth){
+    if(maxWidth<=0) return text;
+    if(ctx.measureText(text).width<=maxWidth) return text;
+    const ellipsis="…";
+    let trimmed=text.trim();
+    while(trimmed.length>1 && ctx.measureText(trimmed+ellipsis).width>maxWidth){
+      trimmed=trimmed.slice(0,-1).trim();
+    }
+    return trimmed+ellipsis;
+  }
+
+  labels.forEach((label,i)=>{
+    const rowTop=padTop + i*rowH;
+    const centerY=rowTop + rowH/2;
+    const bgH=rowH*0.84;
+    const bgY=centerY - bgH/2;
+    const bgColor=i%2===0 ? "rgba(0,85,165,0.12)" : "rgba(0,59,126,0.08)";
+    fillRoundedRect(rowBgX, bgY, rowBgWidth, bgH, 16, bgColor);
+
+    const iconX=rowBgX + 18;
+    ctx.beginPath();
+    ctx.fillStyle="rgba(0,85,165,0.28)";
+    ctx.arc(iconX, centerY, 7, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.fillStyle="#0055a5";
+    ctx.arc(iconX, centerY, 4, 0, Math.PI*2);
+    ctx.fill();
+
+    const labelArea=Math.max(40, padLeft - (rowBgX + 46));
+    const labelText=fitLabel(label, labelArea);
+    ctx.fillStyle="rgba(6,42,99,0.88)";
+    ctx.textAlign="left";
+    ctx.font=baseFont;
+    ctx.fillText(labelText, rowBgX + 36, centerY);
+
+    const value=values[i]||0;
+    const ratio=value/max;
+    const hasValue=value>0;
+    const rawWidth=barMaxWidth*ratio;
+    const barWidth=hasValue ? Math.max(0, Math.min(barMaxWidth, Math.max(6, rawWidth))) : 0;
+    const barHeight=Math.min(32, rowH*0.55);
+    const barY=centerY - barHeight/2;
+
+    if(hasValue){
+      const gradient=ctx.createLinearGradient(padLeft, barY, padLeft + barWidth, barY + barHeight);
+      gradient.addColorStop(0,"#2563eb");
+      gradient.addColorStop(1,"#38bdf8");
+      ctx.save();
+      ctx.shadowColor="rgba(37,99,235,0.25)";
+      ctx.shadowBlur=14;
+      fillRoundedRect(padLeft, barY, barWidth, barHeight, barHeight/2, gradient);
+      ctx.restore();
+    }else{
+      fillRoundedRect(padLeft, barY, 12, barHeight, barHeight/2, "rgba(148,163,184,0.35)");
+    }
+
+    const valText=String(value);
+    ctx.font=valueFont;
+    const metrics=ctx.measureText(valText);
+    const pillPadding=9;
+    const pillWidth=Math.round(metrics.width + pillPadding*2);
+    const pillHeight=24;
+    let pillX;
+
+    if(hasValue && barWidth>pillWidth+28){
+      pillX=padLeft + barWidth - pillWidth - 12;
+      fillRoundedRect(pillX, centerY - pillHeight/2, pillWidth, pillHeight, pillHeight/2, "rgba(255,255,255,0.92)");
+      ctx.fillStyle="#0f1f46";
+    }else{
+      pillX=padLeft + barWidth + 14;
+      if(pillX + pillWidth > W - padRight){
+        pillX=W - padRight - pillWidth;
+      }
+      fillRoundedRect(pillX, centerY - pillHeight/2, pillWidth, pillHeight, pillHeight/2, "rgba(0,85,165,0.15)");
+      ctx.fillStyle="#0b2f66";
+    }
+
+    ctx.textAlign="center";
+    ctx.fillText(valText, pillX + pillWidth/2, centerY);
   });
+
+  ctx.textAlign="left";
+  ctx.font=baseFont;
 }
 
 function getSeriesData(scale){
@@ -3606,7 +3727,7 @@ function buildPdfHtml(clave,pid){
   let bannerSST="",bannerMA="",bannerRSE="";
   if(revSST && revSST.estados){
     const vals=[revSST.estados.sst,revSST.estados.personal,revSST.estados.vehiculos];
-    const allOk=vals.every(v=>v==="APROBADO"||v==="NO APLICA");
+    const allOk=vals.every(v=>BANNER_OK_STATES.has(v));
     const anyObs=vals.includes("OBSERVADO");
     if(allOk) bannerSST = banner("SST","APROBADO",revSST.responsable,revSST.fecha);
     else if(anyObs) bannerSST = banner("SST","OBSERVADO",revSST.responsable,revSST.fecha);
@@ -3788,7 +3909,7 @@ function renderResumen(){
  let bannerSST="",bannerMA="",bannerRSE="";
  if(revSST && revSST.estados){
    const vals=[revSST.estados.sst,revSST.estados.personal,revSST.estados.vehiculos];
-   const allOk=vals.every(v=>v==="APROBADO"||v==="NO APLICA");
+   const allOk=vals.every(v=>BANNER_OK_STATES.has(v));
    const anyObs=vals.includes("OBSERVADO");
    if(allOk)
      bannerSST = `<div class="aprob-banner ok">APROBADO SST — ${revSST.responsable} (${revSST.fecha})</div>`;
