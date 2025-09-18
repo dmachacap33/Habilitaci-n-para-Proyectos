@@ -2567,14 +2567,21 @@ function drawDonut(canvas, aprob, parcial, observ){
   ctx.fillStyle="#1e293b"; ctx.textAlign="center"; ctx.font="700 18px system-ui"; ctx.fillText(`A:${aprob} P:${parcial} O:${observ}`, cx, cy+6);
 }
 function drawRespChart(canvas, labels, values){
+  const pad=40;
+  const minRow=26;
+  const desiredHeight=Math.max(pad*2 + labels.length*minRow, 260);
+  if(canvas.height !== desiredHeight){ canvas.height = desiredHeight; }
   const ctx=canvas.getContext("2d"); const W=canvas.width, H=canvas.height; ctx.clearRect(0,0,W,H);
-  const pad=40; const max=Math.max(1, ...values); const rowH=(H-pad*2)/Math.max(1,labels.length);
+  const max=Math.max(1, ...values); const rowH=(H-pad*2)/Math.max(1,labels.length);
+  ctx.font="14px system-ui"; ctx.textAlign="left"; ctx.textBaseline="middle";
   labels.forEach((l,i)=>{
     const y = pad + i*rowH;
     const w = (W-pad*2)*(values[i]/max);
-    ctx.fillStyle="#3b82f6"; if(values[i]>0) ctx.fillRect(pad, y+6, w, rowH*0.5);
-    ctx.fillStyle="#1e293b"; ctx.font="14px system-ui"; ctx.textAlign="left";
-    ctx.fillText(`${l} — ${values[i]}`, pad+4, y);
+    const barY = y + rowH*0.25;
+    const barH = rowH*0.5;
+    ctx.fillStyle="#3b82f6"; if(values[i]>0) ctx.fillRect(pad, barY, w, barH);
+    ctx.fillStyle="#1e293b";
+    ctx.fillText(`${l} — ${values[i]}`, pad+4, y + rowH/2);
   });
 }
 
