@@ -1523,6 +1523,7 @@ const storedSheetUrl = localStorage.getItem('sheetWebAppUrl');
 if(storedSheetUrl) SHEET_WEBAPP_URL = storedSheetUrl;
 let EXPORT_DIR_HANDLE = null;
 const DB_NAME = "ypfb-crm-db-v4"; const STORE = "fs";
+const BANNER_OK_STATES = new Set(["APROBADO","NO APLICA","SIN PERSONAL","SIN VEHICULO"]);
 function idbOpen(){return new Promise((res,rej)=>{const req = indexedDB.open(DB_NAME,1);req.onupgradeneeded=e=>e.target.result.createObjectStore(STORE);req.onsuccess=e=>res(e.target.result);req.onerror=e=>rej(e.target.error);});}
 async function idbSet(k,v){const db=await idbOpen();return new Promise((res,rej)=>{const tx=db.transaction(STORE,"readwrite");tx.objectStore(STORE).put(v,k);tx.oncomplete=()=>res();tx.onerror=e=>rej(e.target.error);});}
 async function idbGet(k){const db=await idbOpen();return new Promise((res,rej)=>{const tx=db.transaction(STORE,"readonly");const rq=tx.objectStore(STORE).get(k);rq.onsuccess=()=>res(rq.result);rq.onerror=e=>rej(e.target.error);});}
@@ -3606,7 +3607,7 @@ function buildPdfHtml(clave,pid){
   let bannerSST="",bannerMA="",bannerRSE="";
   if(revSST && revSST.estados){
     const vals=[revSST.estados.sst,revSST.estados.personal,revSST.estados.vehiculos];
-    const allOk=vals.every(v=>v==="APROBADO"||v==="NO APLICA");
+    const allOk=vals.every(v=>BANNER_OK_STATES.has(v));
     const anyObs=vals.includes("OBSERVADO");
     if(allOk) bannerSST = banner("SST","APROBADO",revSST.responsable,revSST.fecha);
     else if(anyObs) bannerSST = banner("SST","OBSERVADO",revSST.responsable,revSST.fecha);
@@ -3788,7 +3789,7 @@ function renderResumen(){
  let bannerSST="",bannerMA="",bannerRSE="";
  if(revSST && revSST.estados){
    const vals=[revSST.estados.sst,revSST.estados.personal,revSST.estados.vehiculos];
-   const allOk=vals.every(v=>v==="APROBADO"||v==="NO APLICA");
+   const allOk=vals.every(v=>BANNER_OK_STATES.has(v));
    const anyObs=vals.includes("OBSERVADO");
    if(allOk)
      bannerSST = `<div class="aprob-banner ok">APROBADO SST — ${revSST.responsable} (${revSST.fecha})</div>`;
