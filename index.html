@@ -2567,6 +2567,7 @@ function drawDonut(canvas, aprob, parcial, observ){
   ctx.fillStyle="#1e293b"; ctx.textAlign="center"; ctx.font="700 18px system-ui"; ctx.fillText(`A:${aprob} P:${parcial} O:${observ}`, cx, cy+6);
 }
 function drawRespChart(canvas, labels, values){
+
   const padTop=36, padBottom=36, padRight=40;
   const minRow=34;
   const desiredHeight=Math.max(padTop + padBottom + labels.length*minRow, 300);
@@ -2692,6 +2693,7 @@ function drawRespChart(canvas, labels, values){
 
     ctx.textAlign="center";
     ctx.fillText(valText, pillX + pillWidth/2, centerY);
+
   });
 
   ctx.textAlign="left";
