@@ -1614,7 +1614,9 @@ function uid(){return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto
 
 let DBCACHE = {}; // { [empresaClave]: { empresa:{...}, proyectos:{ [proyectoId]: {proyecto, ls025, personal, vehiculos, updatedAt} } } }
 const RESERVED_EMPRESAS = ["geminikeys","historial","sistema-1"]; // claves que no deben mostrarse en dashboard
+
 const RESERVED_ROOT_KEYS = new Set(["usuarios","historial","geminikeys","aiusers"]); // nodos controlados por módulos dedicados
+
 function empresaKeys(){
   return Object.keys(DBCACHE).filter(k=>{
     if(RESERVED_EMPRESAS.includes(k.toLowerCase())) return false;
@@ -1689,16 +1691,20 @@ function persistLocalCache(data){
   }
 }
 function persistDB(){
+
   const payload=getDataForFirebase(DBCACHE);
   if (database) {
     // Use update to merge changes without removing unspecified nodes
     database.ref().update(payload)
+
       .catch(error=>{
         console.error("Error al guardar datos en Firebase:", error);
         alert("Error: No se pudieron guardar los cambios en la nube.");
       });
   }
+
   persistLocalCache();
+
 }
 
 function persistPersonal(){
@@ -1713,7 +1719,9 @@ function persistPersonal(){
         alert("Error: No se pudieron guardar los cambios en la nube.");
       });
   }
+
   persistLocalCache();
+
 }
 
 function persistVehiculos(){
@@ -1728,7 +1736,9 @@ function persistVehiculos(){
         alert("Error: No se pudieron guardar los cambios en la nube.");
       });
   }
+
   persistLocalCache();
+
 }
 
 function cargarUsuariosDesdeFirebase(){
@@ -1784,6 +1794,7 @@ function obtenerHistorialProyecto(nombre){
 
 function cargarDatosDesdeFirebase(){
   if (!database) {
+
     let localData={};
     try{
       localData=JSON.parse(localStorage.getItem("dbCacheV4")||"{}")||{};
@@ -1793,6 +1804,7 @@ function cargarDatosDesdeFirebase(){
     }
     DBCACHE = (localData && typeof localData === 'object') ? localData : {};
     persistLocalCache();
+
     renderDashboard();
     refreshSelectorsAll();
     refreshEmpresaList();
@@ -1801,8 +1813,10 @@ function cargarDatosDesdeFirebase(){
     return;
   }
   const dbRef = database.ref();
+  const localPending = sanitizeCacheData(DBCACHE);
   dbRef.once('value')
     .then(snapshot => {
+
       const data = snapshot.val() || {};
       let localPending={};
       try{
@@ -1824,6 +1838,7 @@ function cargarDatosDesdeFirebase(){
       DBCACHE = merged;
       console.log("Datos descargados desde Firebase (incluyen nodos reservados).");
       persistLocalCache();
+
       // Persist the merged cache so the remote database keeps new entries
       persistDB();
       renderDashboard();
