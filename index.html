@@ -1614,6 +1614,26 @@ function uid(){return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto
 
 let DBCACHE = {}; // { [empresaClave]: { empresa:{...}, proyectos:{ [proyectoId]: {proyecto, ls025, personal, vehiculos, updatedAt} } } }
 const RESERVED_EMPRESAS = ["geminikeys","historial","sistema-1"]; // claves que no deben mostrarse en dashboard
+const RESERVED_ROOT_KEYS = new Set(["usuarios","historial","geminikeys","aiusers"]);
+
+function sanitizeCacheData(source){
+  if(!source || typeof source !== 'object') return {};
+  const clean = {};
+  Object.entries(source).forEach(([key,value])=>{
+    if(value === undefined || value === null) return;
+    if(RESERVED_ROOT_KEYS.has(key.toLowerCase())) return;
+    clean[key] = value;
+  });
+  return clean;
+}
+
+function persistLocalSnapshot(snapshot){
+  const data = sanitizeCacheData(snapshot || DBCACHE);
+  DBCACHE = data;
+  localStorage.setItem("dbCacheV4", JSON.stringify(data));
+  const tag=document.getElementById("db-json");
+  if(tag) tag.textContent=JSON.stringify(data);
+}
 function empresaKeys(){
   return Object.keys(DBCACHE).filter(k=>{
     if(RESERVED_EMPRESAS.includes(k.toLowerCase())) return false;
@@ -1662,17 +1682,17 @@ function saveConversation(){
   localStorage.setItem('aiConversation', JSON.stringify(toSave));
 }
 function persistDB(){
+  const snapshot = sanitizeCacheData(DBCACHE);
+  DBCACHE = snapshot;
   if (database) {
     // Use update to merge changes without removing unspecified nodes
-    database.ref().update(DBCACHE)
+    database.ref().update(snapshot)
       .catch(error=>{
         console.error("Error al guardar datos en Firebase:", error);
         alert("Error: No se pudieron guardar los cambios en la nube.");
       });
-  } else {
-    localStorage.setItem("dbCacheV4", JSON.stringify(DBCACHE));
-    const tag=document.getElementById("db-json"); if(tag) tag.textContent=JSON.stringify(DBCACHE);
   }
+  persistLocalSnapshot(snapshot);
 }
 
 function persistPersonal(){
@@ -1687,8 +1707,7 @@ function persistPersonal(){
         alert("Error: No se pudieron guardar los cambios en la nube.");
       });
   }
-  localStorage.setItem("dbCacheV4", JSON.stringify(DBCACHE));
-  const tag=document.getElementById("db-json"); if(tag) tag.textContent=JSON.stringify(DBCACHE);
+  persistLocalSnapshot();
 }
 
 function persistVehiculos(){
@@ -1703,8 +1722,7 @@ function persistVehiculos(){
         alert("Error: No se pudieron guardar los cambios en la nube.");
       });
   }
-  localStorage.setItem("dbCacheV4", JSON.stringify(DBCACHE));
-  const tag=document.getElementById("db-json"); if(tag) tag.textContent=JSON.stringify(DBCACHE);
+  persistLocalSnapshot();
 }
 
 function cargarUsuariosDesdeFirebase(){
@@ -1760,7 +1778,13 @@ function obtenerHistorialProyecto(nombre){
 
 function cargarDatosDesdeFirebase(){
   if (!database) {
-    DBCACHE = JSON.parse(localStorage.getItem("dbCacheV4")||"{}" );
+    try {
+      const localRaw = JSON.parse(localStorage.getItem("dbCacheV4")||"{}" );
+      DBCACHE = sanitizeCacheData(localRaw);
+    } catch(err) {
+      console.error("Error al leer la copia local de la base de datos:", err);
+      DBCACHE = {};
+    }
     renderDashboard();
     refreshSelectorsAll();
     refreshEmpresaList();
@@ -1769,12 +1793,13 @@ function cargarDatosDesdeFirebase(){
     return;
   }
   const dbRef = database.ref();
+  const localPending = sanitizeCacheData(DBCACHE);
   dbRef.once('value')
     .then(snapshot => {
-      const data = snapshot.val() || {};
+      const data = sanitizeCacheData(snapshot.val() || {});
       // Merge remote snapshot with any local changes to avoid losing
       // recently added companies before the download completes
-      DBCACHE = { ...data, ...DBCACHE };
+      DBCACHE = sanitizeCacheData({ ...data, ...localPending });
       console.log("Datos descargados desde Firebase.");
       // Persist the merged cache so the remote database keeps new entries
       persistDB();
