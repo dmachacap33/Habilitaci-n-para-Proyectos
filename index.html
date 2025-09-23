@@ -1721,6 +1721,21 @@ function cloneData(source){
   if(source===undefined) return undefined;
   return mergeDeep(undefined, source);
 }
+function sanitizeCacheData(source){
+  if(!source || typeof source !== 'object') return {};
+  const clean={};
+  Object.entries(source).forEach(([key,value])=>{
+    if(value===undefined || value===null) return;
+    const lower=String(key).toLowerCase();
+    if(RESERVED_ROOT_KEYS.has(lower)) return;
+    if(value && typeof value === 'object'){
+      clean[key]=cloneData(value);
+    }else{
+      clean[key]=value;
+    }
+  });
+  return clean;
+}
 function persistLocalCache(data){
   if(data && typeof data === 'object'){
     DBCACHE=cloneData(data);
@@ -1916,20 +1931,25 @@ function cargarDatosDesdeFirebase(){
     return;
   }
   const dbRef = database.ref();
-  const localPending = sanitizeCacheData(DBCACHE);
+  const localPendingSnapshot = sanitizeCacheData(DBCACHE);
   dbRef.once('value')
     .then(snapshot => {
 
       const data = snapshot.val() || {};
 
       persistRemoteBackup(data);
-      let localPending={};
+      let localPending=localPendingSnapshot;
       try{
-        localPending=JSON.parse(localStorage.getItem(LOCAL_CACHE_KEY)||"{}")||{};
+        const storedLocal=JSON.parse(localStorage.getItem(LOCAL_CACHE_KEY)||"{}")||{};
+        if(storedLocal && typeof storedLocal === 'object'){
+          localPending=sanitizeCacheData(storedLocal);
+        }else{
+          localPending={};
+        }
 
       }catch(err){
         console.error("Error al leer la copia local de la base de datos:", err);
-        localPending={};
+        localPending=localPendingSnapshot;
       }
 
       const merged=cloneData(data || {});
