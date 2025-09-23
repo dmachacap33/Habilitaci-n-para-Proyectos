@@ -1613,7 +1613,12 @@ function ts(){
 function uid(){return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));}
 
 let DBCACHE = {}; // { [empresaClave]: { empresa:{...}, proyectos:{ [proyectoId]: {proyecto, ls025, personal, vehiculos, updatedAt} } } }
+const LOCAL_CACHE_KEY = "dbCacheV4";
+const REMOTE_CACHE_KEY = "dbCacheV4Remote";
+const CACHE_META_KEY = "dbCacheV4Meta";
+const LAST_PAYLOAD_KEY = "dbCacheV4LastPayload";
 const RESERVED_EMPRESAS = ["geminikeys","historial","sistema-1"]; // claves que no deben mostrarse en dashboard
+const RESERVED_ROOT_KEYS = new Set(["usuarios","historial","geminikeys","aiusers"]); // nodos controlados por módulos dedicados
 function empresaKeys(){
   return Object.keys(DBCACHE).filter(k=>{
     if(RESERVED_EMPRESAS.includes(k.toLowerCase())) return false;
@@ -1661,18 +1666,97 @@ function saveConversation(){
   const toSave = conversation.slice(-max);
   localStorage.setItem('aiConversation', JSON.stringify(toSave));
 }
+function getDataForFirebase(source){
+  if(!source || typeof source !== 'object') return {};
+  const clean={};
+  Object.entries(source).forEach(([key,value])=>{
+    if(value===undefined || value===null) return;
+    const lower=String(key).toLowerCase();
+    if(!RESERVED_ROOT_KEYS.has(lower)) clean[key]=value;
+  });
+  return clean;
+}
+function mergeDeep(base, incoming){
+  if(incoming===undefined) return base;
+  if(incoming===null) return null;
+  if(Array.isArray(incoming)){
+    return incoming.map(item=>{
+      if(item && typeof item === 'object'){
+        return mergeDeep(undefined, item);
+      }
+      return item;
+    });
+  }
+  if(typeof incoming !== 'object') return incoming;
+  const baseObj = (base && typeof base === 'object' && !Array.isArray(base)) ? base : {};
+  const result = {};
+  let changed=false;
+  const keys=new Set([...Object.keys(baseObj), ...Object.keys(incoming)]);
+  keys.forEach(key=>{
+    if(!(key in incoming)){
+      result[key]=baseObj[key];
+      return;
+    }
+    const mergedVal=mergeDeep(baseObj[key], incoming[key]);
+    result[key]=mergedVal;
+    if(mergedVal!==baseObj[key]) changed=true;
+  });
+  if(!changed && keys.size===Object.keys(baseObj).length){
+    return base;
+  }
+  return result;
+}
+function cloneData(source){
+  if(source===undefined) return undefined;
+  return mergeDeep(undefined, source);
+}
+function persistLocalCache(data){
+  if(data && typeof data === 'object'){
+    DBCACHE=cloneData(data);
+  }
+  const jsonFull=JSON.stringify(DBCACHE);
+  try{
+    localStorage.setItem(LOCAL_CACHE_KEY, jsonFull);
+    let meta={};
+    try{ meta=JSON.parse(localStorage.getItem(CACHE_META_KEY)||"{}")||{}; }catch(_){ meta={}; }
+    meta.localUpdatedAt=Date.now();
+    localStorage.setItem(CACHE_META_KEY, JSON.stringify(meta));
+  }catch(err){
+    console.error("No se pudo guardar la copia local de la base de datos:", err);
+  }
+  const tag=document.getElementById("db-json");
+  if(tag){
+    const visible=JSON.stringify(getDataForFirebase(DBCACHE));
+    tag.textContent=visible;
+  }
+}
+function persistRemoteBackup(snapshot){
+  try{
+    localStorage.setItem(REMOTE_CACHE_KEY, JSON.stringify(snapshot||{}));
+    let meta={};
+    try{ meta=JSON.parse(localStorage.getItem(CACHE_META_KEY)||"{}")||{}; }catch(_){ meta={}; }
+    meta.remoteSyncedAt=Date.now();
+    localStorage.setItem(CACHE_META_KEY, JSON.stringify(meta));
+  }catch(err){
+    console.error("No se pudo guardar la copia remota de la base de datos:", err);
+  }
+}
 function persistDB(){
+  const payload=getDataForFirebase(DBCACHE);
   if (database) {
     // Use update to merge changes without removing unspecified nodes
-    database.ref().update(DBCACHE)
+    try{
+      localStorage.setItem(LAST_PAYLOAD_KEY, JSON.stringify({sentAt:Date.now(), payload}));
+    }catch(err){
+      console.warn("No se pudo registrar el último payload enviado:", err);
+    }
+    database.ref().update(payload)
       .catch(error=>{
         console.error("Error al guardar datos en Firebase:", error);
         alert("Error: No se pudieron guardar los cambios en la nube.");
       });
-  } else {
-    localStorage.setItem("dbCacheV4", JSON.stringify(DBCACHE));
-    const tag=document.getElementById("db-json"); if(tag) tag.textContent=JSON.stringify(DBCACHE);
   }
+  persistLocalCache();
 }
 
 function persistPersonal(){
@@ -1687,8 +1771,7 @@ function persistPersonal(){
         alert("Error: No se pudieron guardar los cambios en la nube.");
       });
   }
-  localStorage.setItem("dbCacheV4", JSON.stringify(DBCACHE));
-  const tag=document.getElementById("db-json"); if(tag) tag.textContent=JSON.stringify(DBCACHE);
+  persistLocalCache();
 }
 
 function persistVehiculos(){
@@ -1703,8 +1786,7 @@ function persistVehiculos(){
         alert("Error: No se pudieron guardar los cambios en la nube.");
       });
   }
-  localStorage.setItem("dbCacheV4", JSON.stringify(DBCACHE));
-  const tag=document.getElementById("db-json"); if(tag) tag.textContent=JSON.stringify(DBCACHE);
+  persistLocalCache();
 }
 
 function cargarUsuariosDesdeFirebase(){
@@ -1760,7 +1842,25 @@ function obtenerHistorialProyecto(nombre){
 
 function cargarDatosDesdeFirebase(){
   if (!database) {
-    DBCACHE = JSON.parse(localStorage.getItem("dbCacheV4")||"{}" );
+    let localData={};
+    try{
+      localData=JSON.parse(localStorage.getItem(LOCAL_CACHE_KEY)||"{}")||{};
+    }catch(err){
+      console.error("Error al leer la copia local de la base de datos:", err);
+      localData={};
+    }
+    if(!localData || typeof localData !== 'object' || !Object.keys(localData).length){
+      try{
+        const backup=JSON.parse(localStorage.getItem(REMOTE_CACHE_KEY)||"{}")||{};
+        if(backup && typeof backup === 'object' && Object.keys(backup).length){
+          localData=backup;
+        }
+      }catch(err){
+        console.warn("No se pudo recuperar la copia remota almacenada localmente:", err);
+      }
+    }
+    DBCACHE = (localData && typeof localData === 'object') ? cloneData(localData) : {};
+    persistLocalCache();
     renderDashboard();
     refreshSelectorsAll();
     refreshEmpresaList();
@@ -1772,12 +1872,48 @@ function cargarDatosDesdeFirebase(){
   dbRef.once('value')
     .then(snapshot => {
       const data = snapshot.val() || {};
-      // Merge remote snapshot with any local changes to avoid losing
-      // recently added companies before the download completes
-      DBCACHE = { ...data, ...DBCACHE };
-      console.log("Datos descargados desde Firebase.");
-      // Persist the merged cache so the remote database keeps new entries
-      persistDB();
+      persistRemoteBackup(data);
+      let localPending={};
+      try{
+        localPending=JSON.parse(localStorage.getItem(LOCAL_CACHE_KEY)||"{}")||{};
+      }catch(err){
+        console.error("Error al leer la copia local de la base de datos:", err);
+        localPending={};
+      }
+      const merged=cloneData(data || {});
+      let appliedLocal=false;
+      Object.entries(localPending||{}).forEach(([key,value])=>{
+        if(value===undefined) return;
+        const lower=String(key).toLowerCase();
+        if(RESERVED_ROOT_KEYS.has(lower)){
+          if(!(key in merged)){
+            merged[key]=cloneData(value);
+            appliedLocal=true;
+          }
+          return;
+        }
+        const previous=merged[key];
+        const isPlainObject=value && typeof value === 'object' && !Array.isArray(value);
+        if(isPlainObject && !Object.keys(value).length){
+          if(previous===undefined){
+            merged[key]={};
+            appliedLocal=true;
+          }
+          return;
+        }
+        const next=mergeDeep(previous, value);
+        if(next!==previous){
+          merged[key]=next;
+          appliedLocal=true;
+        }
+      });
+      DBCACHE = merged;
+      console.log("Datos descargados desde Firebase (incluyen nodos reservados).");
+      persistLocalCache();
+      // Persist only si existían cambios locales pendientes
+      if(appliedLocal){
+        persistDB();
+      }
       renderDashboard();
       refreshSelectorsAll();
       refreshEmpresaList();
@@ -4151,7 +4287,7 @@ $$(".tab").forEach(t=> t.addEventListener("click", ()=> switchTab(t.dataset.tab)
 /* ================== Limpieza de cache ================== */
 function limpiarCache(){
   if(!confirm("¿Limpiar cache local?")) return;
-  DBCACHE={}; CURRENT={}; localStorage.removeItem("dbCacheV4"); localStorage.removeItem("currentV4");
+  DBCACHE={}; CURRENT={}; localStorage.removeItem(LOCAL_CACHE_KEY); localStorage.removeItem(REMOTE_CACHE_KEY); localStorage.removeItem(CACHE_META_KEY); localStorage.removeItem(LAST_PAYLOAD_KEY); localStorage.removeItem("currentV4");
   const tag=document.getElementById("db-json"); if(tag) tag.textContent="{}";
   renderDashboard(); refreshSelectorsAll(); renderYPFB();
 }
