@@ -1618,7 +1618,9 @@ const REMOTE_CACHE_KEY = "dbCacheV4Remote";
 const CACHE_META_KEY = "dbCacheV4Meta";
 const LAST_PAYLOAD_KEY = "dbCacheV4LastPayload";
 const RESERVED_EMPRESAS = ["geminikeys","historial","sistema-1"]; // claves que no deben mostrarse en dashboard
+
 const RESERVED_ROOT_KEYS = new Set(["usuarios","historial","geminikeys","aiusers"]); // nodos controlados por módulos dedicados
+
 function empresaKeys(){
   return Object.keys(DBCACHE).filter(k=>{
     if(RESERVED_EMPRESAS.includes(k.toLowerCase())) return false;
@@ -1676,6 +1678,7 @@ function getDataForFirebase(source){
   });
   return clean;
 }
+
 function mergeDeep(base, incoming){
   if(incoming===undefined) return base;
   if(incoming===null) return null;
@@ -1721,6 +1724,7 @@ function persistLocalCache(data){
     try{ meta=JSON.parse(localStorage.getItem(CACHE_META_KEY)||"{}")||{}; }catch(_){ meta={}; }
     meta.localUpdatedAt=Date.now();
     localStorage.setItem(CACHE_META_KEY, JSON.stringify(meta));
+
   }catch(err){
     console.error("No se pudo guardar la copia local de la base de datos:", err);
   }
@@ -1730,6 +1734,7 @@ function persistLocalCache(data){
     tag.textContent=visible;
   }
 }
+
 function persistRemoteBackup(snapshot){
   try{
     localStorage.setItem(REMOTE_CACHE_KEY, JSON.stringify(snapshot||{}));
@@ -1751,12 +1756,15 @@ function persistDB(){
       console.warn("No se pudo registrar el último payload enviado:", err);
     }
     database.ref().update(payload)
+
       .catch(error=>{
         console.error("Error al guardar datos en Firebase:", error);
         alert("Error: No se pudieron guardar los cambios en la nube.");
       });
   }
+
   persistLocalCache();
+
 }
 
 function persistPersonal(){
@@ -1771,7 +1779,9 @@ function persistPersonal(){
         alert("Error: No se pudieron guardar los cambios en la nube.");
       });
   }
+
   persistLocalCache();
+
 }
 
 function persistVehiculos(){
@@ -1786,7 +1796,9 @@ function persistVehiculos(){
         alert("Error: No se pudieron guardar los cambios en la nube.");
       });
   }
+
   persistLocalCache();
+
 }
 
 function cargarUsuariosDesdeFirebase(){
@@ -1842,13 +1854,16 @@ function obtenerHistorialProyecto(nombre){
 
 function cargarDatosDesdeFirebase(){
   if (!database) {
+
     let localData={};
     try{
       localData=JSON.parse(localStorage.getItem(LOCAL_CACHE_KEY)||"{}")||{};
+
     }catch(err){
       console.error("Error al leer la copia local de la base de datos:", err);
       localData={};
     }
+
     if(!localData || typeof localData !== 'object' || !Object.keys(localData).length){
       try{
         const backup=JSON.parse(localStorage.getItem(REMOTE_CACHE_KEY)||"{}")||{};
@@ -1861,6 +1876,7 @@ function cargarDatosDesdeFirebase(){
     }
     DBCACHE = (localData && typeof localData === 'object') ? cloneData(localData) : {};
     persistLocalCache();
+
     renderDashboard();
     refreshSelectorsAll();
     refreshEmpresaList();
@@ -1869,23 +1885,30 @@ function cargarDatosDesdeFirebase(){
     return;
   }
   const dbRef = database.ref();
+  const localPending = sanitizeCacheData(DBCACHE);
   dbRef.once('value')
     .then(snapshot => {
+
       const data = snapshot.val() || {};
+
       persistRemoteBackup(data);
       let localPending={};
       try{
         localPending=JSON.parse(localStorage.getItem(LOCAL_CACHE_KEY)||"{}")||{};
+
       }catch(err){
         console.error("Error al leer la copia local de la base de datos:", err);
         localPending={};
       }
+
       const merged=cloneData(data || {});
       let appliedLocal=false;
+
       Object.entries(localPending||{}).forEach(([key,value])=>{
         if(value===undefined) return;
         const lower=String(key).toLowerCase();
         if(RESERVED_ROOT_KEYS.has(lower)){
+
           if(!(key in merged)){
             merged[key]=cloneData(value);
             appliedLocal=true;
@@ -1905,15 +1928,18 @@ function cargarDatosDesdeFirebase(){
         if(next!==previous){
           merged[key]=next;
           appliedLocal=true;
+
         }
       });
       DBCACHE = merged;
       console.log("Datos descargados desde Firebase (incluyen nodos reservados).");
       persistLocalCache();
+
       // Persist only si existían cambios locales pendientes
       if(appliedLocal){
         persistDB();
       }
+
       renderDashboard();
       refreshSelectorsAll();
       refreshEmpresaList();
