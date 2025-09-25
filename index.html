@@ -2033,48 +2033,78 @@ function checkResponsableRole(){
 }
 
 /* =============================================================== */
-function confirmLogin(){
-  const nombre=$("#login-nombre").value.trim();
-  const correo=$("#login-correo").value.trim().toLowerCase();
-  const pass1=$("#login-pass1").value.trim();
-  const pass2=$("#login-pass2").value.trim();
-  const codigoInput=$("#login-codigo");
-  const codigo=codigoInput?codigoInput.value.trim():"";
-  const remember=$("#login-remember").checked;
-  const key=codigo||correo;
-  if(!nombre||!correo||!pass1){alert("Complete los datos");return;}
-  let u=USERS[key];
-  if(u){
-    if(u.pass!==pass1){alert("Contraseña incorrecta");return;}
-    u.ultimoLogin = new Date().toISOString();
-  }else{
-    if(pass1!==pass2){alert("Las contraseñas no coinciden");return;}
-    u={codigo:key,nombre,correo,pass:pass1,fecha:new Date().toISOString(), ultimoLogin:new Date().toISOString()};
-    USERS[key]=u;
-  }
-  if(correo!=="david.machaca@ypfbtransporte.com.bo" && !tieneAsignacionResponsable(correo)){
-    alert("No tiene responsabilidades asignadas en ningún proyecto.");
+function confirmLogin() {
+  const correo = $("#login-correo").value.trim().toLowerCase();
+  const pass1 = $("#login-pass1").value.trim();
+  const pass2 = $("#login-pass2").value.trim();
+  const nombre = $("#login-nombre").value.trim();
+  const remember = $("#login-remember").checked;
+
+  if (!correo || !pass1) {
+    alert("Por favor, ingrese correo y contraseña.");
     return;
   }
-  localStorage.setItem("usuariosApp",JSON.stringify(USERS));
-  if(database){
-    database.ref('usuarios/'+key).set(u).catch(err=>{
-      console.error("Error al guardar usuario en Firebase:", err);
+
+  // Intenta iniciar sesión
+  auth.signInWithEmailAndPassword(correo, pass1)
+    .then((userCredential) => {
+      // El usuario inició sesión correctamente
+      console.log("Usuario autenticado:", userCredential.user);
+      handleSuccessfulLogin(userCredential.user, remember);
+    })
+    .catch((error) => {
+      // Si el usuario no existe, lo creamos
+      if (error.code === 'auth/user-not-found') {
+        if (pass1 !== pass2) {
+          alert("Las contraseñas para el nuevo usuario no coinciden.");
+          return;
+        }
+        auth.createUserWithEmailAndPassword(correo, pass1)
+          .then((userCredential) => {
+            console.log("Usuario nuevo creado:", userCredential.user);
+
+            // Opcional: Guarda información adicional del usuario en la base de datos
+            const newUserRef = database.ref('usuarios/' + userCredential.user.uid);
+            newUserRef.set({
+              nombre: nombre,
+              correo: correo,
+              fecha: new Date().toISOString()
+            });
+
+            handleSuccessfulLogin(userCredential.user, remember);
+          })
+          .catch((createError) => {
+            alert("Error al crear usuario: " + createError.message);
+          });
+      } else {
+        // Otro tipo de error (contraseña incorrecta, etc.)
+        alert("Error de autenticación: " + error.message);
+      }
     });
-  }
-  USUARIO={codigo:key,nombre,correo,admin:correo==="david.machaca@ypfbtransporte.com.bo"};
-  if(remember){
-    localStorage.setItem("usuarioActual",JSON.stringify(USUARIO));
-  }else{
-    sessionStorage.setItem("usuarioActual",JSON.stringify(USUARIO));
+}
+
+function handleSuccessfulLogin(user, remember) {
+  // Lógica que tenías después de un login exitoso
+  USUARIO = {
+    uid: user.uid,
+    nombre: user.displayName || $("#login-nombre").value, // Toma el nombre del campo si no está en el perfil
+    correo: user.email,
+    admin: user.email === "david.machaca@ypfbtransporte.com.bo"
+  };
+
+  if (remember) {
+    localStorage.setItem("usuarioActual", JSON.stringify(USUARIO));
+  } else {
+    sessionStorage.setItem("usuarioActual", JSON.stringify(USUARIO));
     localStorage.removeItem("usuarioActual");
   }
-  $("#userEmail").value=correo;
-  $("#login-modal").style.display="none";
+
+  $("#userEmail").value = USUARIO.correo;
+  $("#login-modal").style.display = "none";
   toggleAdminUI(USUARIO.admin);
-  if(USUARIO.admin){
+  if (USUARIO.admin) {
     renderUsuarios();
-    setTimeout(()=>{iniciarAsistenteIA();},1000);
+    setTimeout(() => { iniciarAsistenteIA(); }, 1000);
   }
   renderYPFB();
   checkResponsableRole();
