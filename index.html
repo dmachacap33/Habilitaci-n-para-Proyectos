@@ -220,13 +220,16 @@ canvas{width:100%;height:300px;border-radius:8px}
 }
 .introjs-bullets li a.active{background:#fff}
 @media (max-width:768px){
-  .sidebar{position:static;width:100%;height:auto;flex-direction:row;border-right:none;border-bottom:1px solid var(--border);}
+  .sidebar{position:static;width:100%;height:auto;flex-direction:row;border-right:none;border-bottom:1px solid var(--border);overflow-x:auto;}
   .sidebar .tab span{display:none;}
   .sidebar:hover{width:100%;}
   .sidebar:hover .tab span{display:none;}
   .main{margin-left:0;width:100%;}
   .grid{grid-template-columns:1fr;}
   .col-12,.col-8,.col-6,.col-4,.col-3{grid-column:span 1;}
+  header{flex-wrap:wrap;gap:8px;}
+  header .spacer{display:none;}
+  header label,header .inp,header .btn{width:100%;}
 }
 @media (min-width:769px) and (max-width:1024px){
   .grid{grid-template-columns:repeat(8,1fr);}
@@ -236,6 +239,17 @@ canvas{width:100%;height:300px;border-radius:8px}
   .col-4{grid-column:span 4;}
   .col-3{grid-column:span 2;}
 }
+
+body.mobile-viewport .sidebar{position:static;width:100%;height:auto;flex-direction:row;border-right:none;border-bottom:1px solid var(--border);overflow-x:auto;}
+body.mobile-viewport .sidebar .tab span{display:none;}
+body.mobile-viewport .sidebar:hover{width:100%;}
+body.mobile-viewport .sidebar:hover .tab span{display:none;}
+body.mobile-viewport .main{margin-left:0;width:100%;}
+body.mobile-viewport .grid{grid-template-columns:1fr;}
+body.mobile-viewport .col-12,body.mobile-viewport .col-8,body.mobile-viewport .col-6,body.mobile-viewport .col-4,body.mobile-viewport .col-3{grid-column:span 1;}
+body.mobile-viewport header{flex-wrap:wrap;gap:8px;}
+body.mobile-viewport header .spacer{display:none;}
+body.mobile-viewport header label,body.mobile-viewport header .inp,body.mobile-viewport header .btn{width:100%;}
 
 </style>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
@@ -1600,6 +1614,26 @@ async function enviarASheet(data) {
 /* ================== Datos / Estado ================== */
 const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
+
+function applyMobileViewportFix(){
+  const viewport = window.visualViewport;
+  const width = viewport ? viewport.width : window.innerWidth;
+  const body = document.body;
+  if(!body) return;
+  if(width <= 768){
+    body.classList.add('mobile-viewport');
+  }else{
+    body.classList.remove('mobile-viewport');
+  }
+}
+
+applyMobileViewportFix();
+window.addEventListener('resize', applyMobileViewportFix);
+if(window.visualViewport){
+  window.visualViewport.addEventListener('resize', applyMobileViewportFix);
+}
+setTimeout(applyMobileViewportFix, 300);
+
 // Fecha y hora local para Bolivia (UTC-4)
 const nowIso = ()=>{
   const now = new Date();
