@@ -2077,30 +2077,38 @@ function confirmLogin() {
     return;
   }
 
+
   pendingRememberChoice = remember;
   pendingNombreLogin = nombre;
+
 
   // Intenta iniciar sesión
   auth.signInWithEmailAndPassword(correo, pass1)
     .then((userCredential) => {
       // El usuario inició sesión correctamente
       console.log("Usuario autenticado:", userCredential.user);
+
+
     })
     .catch((error) => {
       // Si el usuario no existe, lo creamos
       if (error.code === 'auth/user-not-found') {
         if (pass1 !== pass2) {
           alert("Las contraseñas para el nuevo usuario no coinciden.");
+
           pendingRememberChoice = null;
           pendingNombreLogin = "";
+
           return;
         }
         auth.createUserWithEmailAndPassword(correo, pass1)
           .then((userCredential) => {
             console.log("Usuario nuevo creado:", userCredential.user);
+
             if(nombre){
               userCredential.user.updateProfile({ displayName: nombre }).catch(()=>{});
             }
+
 
             // Opcional: Guarda información adicional del usuario en la base de datos
             const newUserRef = database.ref('usuarios/' + userCredential.user.uid);
@@ -2109,15 +2117,18 @@ function confirmLogin() {
               correo: correo,
               fecha: new Date().toISOString()
             });
+
           })
           .catch((createError) => {
             alert("Error al crear usuario: " + createError.message);
             pendingRememberChoice = null;
             pendingNombreLogin = "";
+
           });
       } else {
         // Otro tipo de error (contraseña incorrecta, etc.)
         alert("Error de autenticación: " + error.message);
+
         pendingRememberChoice = null;
         pendingNombreLogin = "";
       }
@@ -2133,20 +2144,25 @@ function handleSuccessfulLogin(user, remember, nombreManual = "") {
   USUARIO = {
     uid: user.uid,
     nombre: nombreFinal,
+
     correo: user.email,
     admin: user.email === "david.machaca@ypfbtransporte.com.bo"
   };
 
   if (remember) {
     localStorage.setItem("usuarioActual", JSON.stringify(USUARIO));
+
     sessionStorage.removeItem("usuarioActual");
+
   } else {
     sessionStorage.setItem("usuarioActual", JSON.stringify(USUARIO));
     localStorage.removeItem("usuarioActual");
   }
 
+
   pendingRememberChoice = null;
   pendingNombreLogin = "";
+
 
   $("#userEmail").value = USUARIO.correo;
   $("#login-modal").style.display = "none";
