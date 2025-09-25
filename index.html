@@ -1648,6 +1648,11 @@ let ls025FilteredIds = null;
 let conversation = JSON.parse(localStorage.getItem('aiConversation') || 'null');
 let HISTORIAL = {};
 let currentProyecto = null;
+let pendingRememberChoice = null;
+let pendingNombreLogin = "";
+let firebaseRootRef = null;
+let firebaseValueListener = null;
+let firebaseErrorShown = false;
 if (!conversation) {
   conversation = [{
     role: 'model',
@@ -1858,7 +1863,7 @@ function persistVehiculos(){
 }
 
 function cargarUsuariosDesdeFirebase(){
-  if(!database){
+  if(!database || (auth && !auth.currentUser)){
     USERS = JSON.parse(localStorage.getItem("usuariosApp")||"{}") || {};
     return;
   }
@@ -1876,7 +1881,7 @@ function cargarUsuariosDesdeFirebase(){
 }
 
 function cargarHistorialDesdeFirebase(){
-  if(!database){
+  if(!database || (auth && !auth.currentUser)){
     HISTORIAL = {};
     return;
   }
@@ -1908,8 +1913,22 @@ function obtenerHistorialProyecto(nombre){
   return HISTORIAL[key] || [];
 }
 
+function detachFirebaseListener(){
+  if(firebaseRootRef && firebaseValueListener){
+    try{
+      firebaseRootRef.off('value', firebaseValueListener);
+    }catch(err){
+      console.warn('No se pudo cancelar la suscripción de Firebase:', err);
+    }
+  }
+  firebaseRootRef = null;
+  firebaseValueListener = null;
+  firebaseErrorShown = false;
+}
+
 function cargarDatosDesdeFirebase(){
   if (!database) {
+    detachFirebaseListener();
     DBCACHE = {};
     REMOTE_SNAPSHOT = {};
     persistLocalCache();
@@ -1920,8 +1939,16 @@ function cargarDatosDesdeFirebase(){
     checkResponsableRole();
     return;
   }
+  if(auth && !auth.currentUser){
+    console.warn('Sin sesión autenticada, se omite la carga remota.');
+    return;
+  }
   const dbRef = database.ref();
+  if(firebaseValueListener){
+    detachFirebaseListener();
+  }
   const applySnapshot = snapshot => {
+    firebaseErrorShown = false;
     const data = snapshot.val() || {};
     const sanitized = persistRemoteBackup(data);
     persistLocalCache(sanitized);
@@ -1932,9 +1959,14 @@ function cargarDatosDesdeFirebase(){
     renderYPFB();
     checkResponsableRole();
   };
+  firebaseRootRef = dbRef;
+  firebaseValueListener = applySnapshot;
   dbRef.on('value', applySnapshot, error => {
     console.error("Error al leer datos de Firebase:", error);
-    alert("Error de conexión con la base de datos en la nube. Revisa tu conexión a internet.");
+    if(!firebaseErrorShown){
+      alert("Error de conexión con la base de datos en la nube. Revisa tu conexión a internet.");
+      firebaseErrorShown = true;
+    }
   });
 }
 
@@ -2033,52 +2065,106 @@ function checkResponsableRole(){
 }
 
 /* =============================================================== */
-function confirmLogin(){
-  const nombre=$("#login-nombre").value.trim();
-  const correo=$("#login-correo").value.trim().toLowerCase();
-  const pass1=$("#login-pass1").value.trim();
-  const pass2=$("#login-pass2").value.trim();
-  const codigoInput=$("#login-codigo");
-  const codigo=codigoInput?codigoInput.value.trim():"";
-  const remember=$("#login-remember").checked;
-  const key=codigo||correo;
-  if(!nombre||!correo||!pass1){alert("Complete los datos");return;}
-  let u=USERS[key];
-  if(u){
-    if(u.pass!==pass1){alert("Contraseña incorrecta");return;}
-    u.ultimoLogin = new Date().toISOString();
-  }else{
-    if(pass1!==pass2){alert("Las contraseñas no coinciden");return;}
-    u={codigo:key,nombre,correo,pass:pass1,fecha:new Date().toISOString(), ultimoLogin:new Date().toISOString()};
-    USERS[key]=u;
-  }
-  if(correo!=="david.machaca@ypfbtransporte.com.bo" && !tieneAsignacionResponsable(correo)){
-    alert("No tiene responsabilidades asignadas en ningún proyecto.");
+function confirmLogin() {
+  const correo = $("#login-correo").value.trim().toLowerCase();
+  const pass1 = $("#login-pass1").value.trim();
+  const pass2 = $("#login-pass2").value.trim();
+  const nombre = $("#login-nombre").value.trim();
+  const remember = $("#login-remember").checked;
+
+  if (!correo || !pass1) {
+    alert("Por favor, ingrese correo y contraseña.");
     return;
   }
-  localStorage.setItem("usuariosApp",JSON.stringify(USERS));
-  if(database){
-    database.ref('usuarios/'+key).set(u).catch(err=>{
-      console.error("Error al guardar usuario en Firebase:", err);
+
+  pendingRememberChoice = remember;
+  pendingNombreLogin = nombre;
+
+  // Intenta iniciar sesión
+  auth.signInWithEmailAndPassword(correo, pass1)
+    .then((userCredential) => {
+      // El usuario inició sesión correctamente
+      console.log("Usuario autenticado:", userCredential.user);
+    })
+    .catch((error) => {
+      // Si el usuario no existe, lo creamos
+      if (error.code === 'auth/user-not-found') {
+        if (pass1 !== pass2) {
+          alert("Las contraseñas para el nuevo usuario no coinciden.");
+          pendingRememberChoice = null;
+          pendingNombreLogin = "";
+          return;
+        }
+        auth.createUserWithEmailAndPassword(correo, pass1)
+          .then((userCredential) => {
+            console.log("Usuario nuevo creado:", userCredential.user);
+            if(nombre){
+              userCredential.user.updateProfile({ displayName: nombre }).catch(()=>{});
+            }
+
+            // Opcional: Guarda información adicional del usuario en la base de datos
+            const newUserRef = database.ref('usuarios/' + userCredential.user.uid);
+            newUserRef.set({
+              nombre: nombre,
+              correo: correo,
+              fecha: new Date().toISOString()
+            });
+          })
+          .catch((createError) => {
+            alert("Error al crear usuario: " + createError.message);
+            pendingRememberChoice = null;
+            pendingNombreLogin = "";
+          });
+      } else {
+        // Otro tipo de error (contraseña incorrecta, etc.)
+        alert("Error de autenticación: " + error.message);
+        pendingRememberChoice = null;
+        pendingNombreLogin = "";
+      }
     });
-  }
-  USUARIO={codigo:key,nombre,correo,admin:correo==="david.machaca@ypfbtransporte.com.bo"};
-  if(remember){
-    localStorage.setItem("usuarioActual",JSON.stringify(USUARIO));
-  }else{
-    sessionStorage.setItem("usuarioActual",JSON.stringify(USUARIO));
+}
+
+function handleSuccessfulLogin(user, remember, nombreManual = "") {
+  if(!user) return;
+  const nombreCampo = nombreManual || ($("#login-nombre")?.value || "").trim();
+  const nombrePrevio = USUARIO?.nombre || "";
+  const nombreFinal = user.displayName || nombreCampo || nombrePrevio;
+
+  USUARIO = {
+    uid: user.uid,
+    nombre: nombreFinal,
+    correo: user.email,
+    admin: user.email === "david.machaca@ypfbtransporte.com.bo"
+  };
+
+  if (remember) {
+    localStorage.setItem("usuarioActual", JSON.stringify(USUARIO));
+    sessionStorage.removeItem("usuarioActual");
+  } else {
+    sessionStorage.setItem("usuarioActual", JSON.stringify(USUARIO));
     localStorage.removeItem("usuarioActual");
   }
-  $("#userEmail").value=correo;
-  $("#login-modal").style.display="none";
+
+  pendingRememberChoice = null;
+  pendingNombreLogin = "";
+
+  $("#userEmail").value = USUARIO.correo;
+  $("#login-modal").style.display = "none";
   toggleAdminUI(USUARIO.admin);
-  if(USUARIO.admin){
+  if (USUARIO.admin) {
     renderUsuarios();
-    setTimeout(()=>{iniciarAsistenteIA();},1000);
+    setTimeout(() => { iniciarAsistenteIA(); }, 1000);
   }
+
+  cargarUsuariosDesdeFirebase();
+  cargarHistorialDesdeFirebase();
+  cargarDatosDesdeFirebase();
+
   renderYPFB();
   checkResponsableRole();
   checkAiAccess();
+  updateNuevoProyectoBtn();
+  startTourOnce();
 }
 
 function resetLoginForm(){
@@ -4639,8 +4725,16 @@ async function iniciarAsistenteIA() {
 }
 
 // ================== Configuración y gestión de IA ==================
-function clearActiveSession(){
-  localStorage.removeItem("usuarioActual");
+function clearActiveSession(preserveLocal=false){
+  detachFirebaseListener();
+  if(auth && auth.currentUser){
+    auth.signOut().catch(err=>{
+      console.warn('No se pudo cerrar la sesión de Firebase:', err);
+    });
+  }
+  if(!preserveLocal){
+    localStorage.removeItem("usuarioActual");
+  }
   sessionStorage.removeItem("usuarioActual");
   USUARIO = {nombre:"", correo:"", codigo:"", admin:false};
   ES_RESPONSABLE = false;
@@ -4829,24 +4923,35 @@ function pruebasSanitizeName() {
 
 /* ================== Inicio ================== */
 function init(){
-    cargarUsuariosDesdeFirebase();
-    cargarHistorialDesdeFirebase();
-    cargarDatosDesdeFirebase();
     populatePersonalList();
     attachLoginListeners();
     refreshEmpresaList();
-    toggleAdminUI(USUARIO.admin);
-    checkAiAccess();
-    if(USUARIO && USUARIO.correo){
-        $("#userEmail").value = USUARIO.correo;
-        if(USUARIO.admin){
-            renderUsuarios();
-            setTimeout(()=>{iniciarAsistenteIA();},1000);
-        }
-    } else {
+    toggleAdminUI(false);
+    toggleResponsableUI(false);
+    setChatVisibility(false);
+
+    if(auth){
+        auth.onAuthStateChanged(user=>{
+            if(user){
+                const remember = pendingRememberChoice!==null ? pendingRememberChoice : !!localStorage.getItem("usuarioActual");
+                const nombreManual = pendingNombreLogin || ($("#login-nombre")?.value || "").trim();
+                handleSuccessfulLogin(user, remember, nombreManual);
+            }else{
+                pendingRememberChoice = null;
+                pendingNombreLogin = "";
+                clearActiveSession(true);
+                renderDashboard();
+                refreshSelectorsAll();
+                renderYPFB();
+                showLoginModal();
+            }
+        });
+    }else{
+        cargarDatosDesdeFirebase();
+        renderYPFB();
         showLoginModal();
     }
-    renderYPFB();
+
     updateNuevoProyectoBtn();
     const nombreInput=$("#emp-nombre");
     if(nombreInput){
@@ -4868,7 +4973,6 @@ function init(){
         });
     }
     $("#ls-rol").addEventListener("change", buildLs025);
-    startTourOnce();
 }
 init();
 if("serviceWorker" in navigator){navigator.serviceWorker.register("service-worker.js");}
