@@ -1719,7 +1719,7 @@ function mergeDeep(base, incoming){
     if(mergedVal!==baseObj[key]) changed=true;
   });
   if(!changed && keys.size===Object.keys(baseObj).length){
-    return base;
+    return base !== undefined ? base : {};
   }
   return result;
 }
@@ -1735,8 +1735,9 @@ function sanitizeCacheData(source){
     const lower=String(key).toLowerCase();
     if(RESERVED_ROOT_KEYS.has(lower)) return;
     if(value && typeof value === 'object'){
-      clean[key]=cloneData(value);
-    }else{
+      const cloned = cloneData(value);
+      if(cloned !== undefined) clean[key]=cloned;
+    }else if(value !== undefined){
       clean[key]=value;
     }
   });
