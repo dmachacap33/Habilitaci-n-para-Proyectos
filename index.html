@@ -1616,10 +1616,13 @@ const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
 
 function applyMobileViewportFix(){
-  const viewport = window.visualViewport;
-  const width = viewport ? viewport.width : window.innerWidth;
   const body = document.body;
   if(!body) return;
+  const doc = document.documentElement;
+  const width = Math.min(
+    window.innerWidth || 0,
+    doc ? doc.clientWidth : Number.POSITIVE_INFINITY
+  );
   if(width <= 768){
     body.classList.add('mobile-viewport');
   }else{
