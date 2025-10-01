@@ -1851,19 +1851,20 @@ function persistDB(){
     return;
   }
 
+  // CORRECCIÓN: Apuntamos a la nueva ruta raíz "appData"
   if (database) {
-    database.ref().update(payload)
+    database.ref('appData').update(payload) // Ruta corregida
       .then(()=>{
         REMOTE_SNAPSHOT = cloneData(sanitizedCurrent);
+        console.log("Datos sincronizados en appData.");
       })
       .catch(error=>{
         console.error("Error al guardar datos en Firebase:", error);
-        alert("Error: No se pudieron guardar los cambios en la nube.");
+        alert("Error: No se pudieron guardar los cambios en la nube. Revisa los permisos.");
       });
   }
 
   persistLocalCache();
-
 }
 
 function persistPersonal(){
@@ -1981,16 +1982,21 @@ function cargarDatosDesdeFirebase(){
     console.warn('Sin sesión autenticada, se omite la carga remota.');
     return;
   }
-  const dbRef = database.ref();
+  
+  // CORRECCIÓN: Apuntamos a la nueva ruta raíz "appData"
+  const dbRef = database.ref('appData'); // Ruta corregida
+  
   if(firebaseValueListener){
     detachFirebaseListener();
   }
   const applySnapshot = snapshot => {
     firebaseErrorShown = false;
     const data = snapshot.val() || {};
+    // IMPORTANTE: Firebase solo devolverá los datos que el usuario tiene permiso para ver.
+    // Si no es admin, 'data' solo contendrá los proyectos a los que está asignado.
     const sanitized = persistRemoteBackup(data);
     persistLocalCache(sanitized);
-    console.log("Datos sincronizados desde Firebase (modo tiempo real).");
+    console.log("Datos sincronizados desde Firebase (modo tiempo real y seguro).");
     renderDashboard();
     refreshSelectorsAll();
     refreshEmpresaList();
