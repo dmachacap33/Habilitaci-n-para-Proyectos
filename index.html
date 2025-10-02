@@ -1509,6 +1509,12 @@ const PERSONAL_LIST = PERSONAL_CSV.trim().split(/\n+/).slice(1).map(line=>{
   const [codigo,nombre,telefono,correo] = line.split(',');
   return {codigo,nombre,telefono,correo};
 });
+
+function findPersonaByCorreo(correo){
+  const mail = (correo||"").trim().toLowerCase();
+  if(!mail) return null;
+  return PERSONAL_LIST.find(p=>(p.correo||"").toLowerCase()===mail) || null;
+}
 </script>
 <script id="db-json" type="application/json"></script>
 
@@ -2149,12 +2155,27 @@ function confirmLogin() {
 
 
             // Opcional: Guarda información adicional del usuario en la base de datos
-            const newUserRef = database.ref('usuarios/' + userCredential.user.uid);
-            newUserRef.set({
-              nombre: nombre,
+            const codigoSeleccionado = ($("#login-codigo")?.value || "").trim();
+            const persona = findPersonaByCorreo(correo) || (codigoSeleccionado ? PERSONAL_LIST.find(p=>p.codigo===codigoSeleccionado) : null);
+            const payloadNombre = nombre || persona?.nombre || correo;
+            const payload = {
+              nombre: payloadNombre,
               correo: correo,
               fecha: new Date().toISOString()
-            });
+            };
+            if(codigoSeleccionado){
+              payload.codigo = codigoSeleccionado;
+            } else if(persona?.codigo){
+              payload.codigo = persona.codigo;
+            }
+            if(persona?.telefono){
+              payload.telefono = persona.telefono;
+            }
+
+            if(database){
+              const userKey = payload.codigo || userCredential.user.uid;
+              database.ref('usuarios/' + userKey).set(payload);
+            }
 
           })
           .catch((createError) => {
@@ -2173,17 +2194,78 @@ function confirmLogin() {
     });
 }
 
+function ensureUsuarioEnRegistro(user, nombrePreferido = "", codigoPreferido = ""){
+  if(!user){
+    return Promise.resolve();
+  }
+  if(!USERS || typeof USERS !== 'object'){
+    USERS = {};
+  }
+  const correo = (user.email||"").trim().toLowerCase();
+  const persona = findPersonaByCorreo(correo);
+  const nombre = nombrePreferido || persona?.nombre || user.displayName || correo || "Usuario";
+  const existente = Object.entries(USERS).find(([_,u])=>{
+    const mail=(u.correo||"").toLowerCase();
+    return (mail && mail===correo) || u.uid===user.uid;
+  }) || null;
+  const codigoPersona = codigoPreferido || persona?.codigo || existente?.[1]?.codigo || "";
+  const claveObjetivo = codigoPersona || existente?.[0] || user.uid;
+  const prev = existente ? existente[1] : USERS[claveObjetivo] || {};
+  const registro = {
+    ...prev,
+    nombre,
+    correo,
+    uid: user.uid
+  };
+  if(codigoPersona){
+    registro.codigo = codigoPersona;
+  }
+  if(persona?.telefono && !registro.telefono){
+    registro.telefono = persona.telefono;
+  }
+  if(!registro.fecha){
+    registro.fecha = new Date().toISOString();
+  }
+
+  const updates = {};
+  if(existente && existente[0] !== claveObjetivo){
+    delete USERS[existente[0]];
+    updates[`usuarios/${existente[0]}`] = null;
+  }
+  USERS[claveObjetivo] = registro;
+  try{
+    localStorage.setItem("usuariosApp", JSON.stringify(USERS));
+  }catch(err){
+    console.warn("No se pudo sincronizar usuarios en localStorage:", err);
+  }
+
+  renderUsuarios();
+
+  if(database){
+    updates[`usuarios/${claveObjetivo}`] = registro;
+    return database.ref().update(updates).catch(err=>{
+      console.error("Error al sincronizar usuario en Firebase:", err);
+    });
+  }
+  return Promise.resolve();
+}
+
 function handleSuccessfulLogin(user, remember, nombreManual = "") {
   if(!user) return;
-  const nombreCampo = nombreManual || ($("#login-nombre")?.value || "").trim();
+  const inputNombre = ($("#login-nombre")?.value || "").trim();
   const nombrePrevio = USUARIO?.nombre || "";
-  const nombreFinal = user.displayName || nombreCampo || nombrePrevio;
+  const persona = findPersonaByCorreo(user.email||"");
+  const nombreFinal = persona?.nombre || nombreManual || user.displayName || inputNombre || nombrePrevio || (user.email||"");
+  const correoLower = (user.email||"").toLowerCase();
+  const registroExistente = Object.values(USERS||{}).find(u=>(u.correo||"").toLowerCase()===correoLower);
+  const codigoPrevio = USUARIO?.codigo || "";
+  const codigoFinal = persona?.codigo || codigoPrevio || registroExistente?.codigo || "";
 
   USUARIO = {
     uid: user.uid,
     nombre: nombreFinal,
-
     correo: user.email,
+    codigo: codigoFinal,
     admin: user.email === "david.machaca@ypfbtransporte.com.bo"
   };
 
@@ -2210,7 +2292,10 @@ function handleSuccessfulLogin(user, remember, nombreManual = "") {
     setTimeout(() => { iniciarAsistenteIA(); }, 1000);
   }
 
-  cargarUsuariosDesdeFirebase();
+  const syncPromise = ensureUsuarioEnRegistro(user, nombreFinal, codigoFinal);
+  syncPromise.finally(()=>{
+    cargarUsuariosDesdeFirebase();
+  });
   cargarHistorialDesdeFirebase();
   cargarDatosDesdeFirebase();
 
