@@ -57,7 +57,8 @@ textarea{min-height:80px;resize:vertical}
 .hist-item{white-space:nowrap;margin-bottom:2px;}
 .resp-card details{margin-top:8px;}
 .resp-card summary{cursor:pointer;font-weight:600;}
-.resp-card .log{margin-top:6px;padding-left:10px;border-left:2px solid var(--border);}
+.resp-card .log{margin-top:6px;padding-left:10px;border-left:2px solid var(--border);max-height:160px;overflow-y:auto;padding-right:6px;}
+.resp-card .hist-item{white-space:normal;word-break:break-word;}
 .status.aprob{color:var(--ok)}.status.observ{color:var(--err)}.status.parcial{color:var(--warn)}
 .kpi{display:flex;gap:10px;flex-wrap:wrap}
 .kpi>div{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:8px 10px}
@@ -3547,9 +3548,13 @@ function abrirProyecto(clave, pid, ro=false){
 /* ================== LS.025 UI ================== */
 function lsRoleMatches(bloque, rol){
   if(!rol) return true;
-  if(rol==="MA") return bloque.startsWith("Medio Ambiente");
+  if(rol==="MA") return bloque.startsWith("Medio Ambiente") || bloque.startsWith("Estándares / Procedimientos / Planes");
   if(rol==="RSE") return bloque.startsWith("Social");
-  if(rol==="SEG") return !(bloque.startsWith("Medio Ambiente") || bloque.startsWith("Social"));
+  if(rol==="SEG") return !(
+    bloque.startsWith("Medio Ambiente") ||
+    bloque.startsWith("Social") ||
+    bloque.startsWith("Estándares / Procedimientos / Planes")
+  );
   return true;
 }
 function buildLs025(){
