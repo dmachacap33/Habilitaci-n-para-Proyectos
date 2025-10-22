@@ -86,6 +86,42 @@ textarea{min-height:80px;resize:vertical}
 .chart-scroll::-webkit-scrollbar-track{background:rgba(15,47,102,0.08);border-radius:999px}
 .chart-scroll::-webkit-scrollbar-thumb{background:rgba(0,85,165,0.35);border-radius:999px}
 .chart-scroll canvas{display:block;width:100%}
+#calendar-reminder{display:none;margin-top:10px;padding:12px;border-radius:12px;border:1px solid var(--border);background:linear-gradient(145deg,rgba(0,85,165,0.18),rgba(56,189,248,0.15));color:#042b63;font-weight:600}
+#calendar-reminder.alert{background:linear-gradient(145deg,rgba(185,28,28,0.18),rgba(248,113,113,0.15));color:#7f1d1d;border-color:rgba(185,28,28,0.45)}
+#calendar-reminder.warn{background:linear-gradient(145deg,rgba(202,138,4,0.18),rgba(253,224,71,0.18));color:#78350f;border-color:rgba(217,119,6,0.45)}
+.calendar-summary{margin:12px 0;padding:10px;border-radius:12px;border:1px dashed var(--border);background:var(--panel);color:var(--muted);font-size:14px}
+.calendar-filters{margin:10px 0;gap:10px;flex-wrap:wrap}
+.calendar-grid{border:1px solid var(--border);border-radius:16px;overflow:hidden;background:var(--card);box-shadow:6px 6px 14px rgba(11,41,89,0.08),-4px -4px 12px rgba(255,255,255,0.9)}
+.calendar-header{display:grid;grid-template-columns:260px 1fr;gap:0;padding:12px;background:var(--panel);border-bottom:1px solid var(--border);align-items:center}
+.calendar-info-header{font-weight:700;color:#0b2f66}
+.calendar-days{display:grid;gap:4px;grid-template-columns:repeat(var(--calendar-cols,7),minmax(80px,1fr));font-size:13px;color:#0b2f66;text-transform:uppercase}
+.calendar-day{padding:6px 4px;border-radius:8px;background:rgba(0,85,165,0.08);text-align:center;display:flex;flex-direction:column;gap:2px}
+.calendar-day.weekend{background:rgba(185,28,28,0.1);color:#7f1d1d}
+.calendar-body{display:flex;flex-direction:column}
+.calendar-row{display:grid;grid-template-columns:260px 1fr;gap:0;padding:14px 12px;border-bottom:1px solid var(--border);align-items:center}
+.calendar-row:nth-child(even){background:rgba(0,85,165,0.04)}
+.calendar-info{display:flex;flex-direction:column;gap:6px}
+.calendar-title{font-weight:600;font-size:15px;color:#0b2f66}
+.calendar-meta{font-size:13px;color:#475569}
+.calendar-timeline{position:relative;height:54px;background:linear-gradient(180deg,rgba(14,116,144,0.05),rgba(15,23,42,0));border-radius:14px;padding:6px 0;overflow:hidden}
+.calendar-day-grid{position:absolute;top:6px;bottom:6px;left:6px;right:6px;display:grid;gap:4px;grid-template-columns:repeat(var(--calendar-cols,7),minmax(80px,1fr))}
+.calendar-bar-layer{position:absolute;top:6px;bottom:6px;left:6px;right:6px}
+.calendar-day-slot{border-radius:10px;background:rgba(148,163,184,0.18)}
+.calendar-day-slot.weekend{background:rgba(185,28,28,0.12)}
+.calendar-bar{position:absolute;height:30px;top:calc(50% - 15px);border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#fff;box-shadow:0 6px 16px rgba(15,23,42,0.25)}
+.calendar-bar.ok{background:linear-gradient(135deg,#22c55e,#16a34a)}
+.calendar-bar.warn{background:linear-gradient(135deg,#f59e0b,#d97706)}
+.calendar-bar.err{background:linear-gradient(135deg,#ef4444,#b91c1c)}
+.calendar-bar.neutral{background:linear-gradient(135deg,#3b82f6,#2563eb)}
+.calendar-marker{position:absolute;top:0;bottom:0;width:2px;background:rgba(185,28,28,0.6)}
+.calendar-marker.today{background:rgba(14,116,144,0.8);box-shadow:0 0 0 3px rgba(14,116,144,0.15)}
+.calendar-empty{padding:18px;color:#475569;font-size:14px}
+.calendar-badge{display:inline-flex;align-items:center;gap:6px}
+.calendar-badge .badge{margin-right:0}
+.calendar-outside{position:absolute;top:6px;bottom:6px;width:6px;border-radius:999px;background:rgba(100,116,139,0.5)}
+.calendar-outside.future{left:auto;right:0}
+.calendar-outside.past{left:0}
+
 #panel-dashboard{font-size:16px}
 #panel-dashboard .small{font-size:16px}
 #panel-dashboard canvas{height:260px}
@@ -318,6 +354,7 @@ body.mobile-viewport header label,body.mobile-viewport header .inp,body.mobile-v
 </div>
 <nav class="sidebar">
   <div class="tab active" data-tab="dashboard"><i>🏠</i><span>Dashboard</span></div>
+  <div class="tab" data-tab="calendario"><i>🗓️</i><span>Calendario</span></div>
   <div class="tab" data-tab="cards"><i>🗂️</i><span>Cards Empresa</span></div>
   <div class="tab" data-tab="resp" style="display:none"><i>📊</i><span>Seguimiento</span></div>
   <div class="tab" data-tab="ypfb"><i>🧑‍💼</i><span>YPFB</span></div>
@@ -340,6 +377,7 @@ body.mobile-viewport header label,body.mobile-viewport header .inp,body.mobile-v
 
 <div class="wrap">
   <div id="bd-banner" class="banner no-print"></div>
+  <div id="calendar-reminder" class="calendar-reminder no-print"></div>
 
   <section id="panel-dashboard" class="panel active">
     <div class="kpi" style="margin-top:10px">
@@ -370,6 +408,28 @@ body.mobile-viewport header label,body.mobile-viewport header .inp,body.mobile-v
       <div class="canvas-card"><div class="small">Estados globales</div><canvas id="cv-estados" width="500" height="300"></canvas></div>
       <div class="canvas-card"><div class="small">Proyectos por tipo</div><canvas id="cv-tipos" width="500" height="300"></canvas></div>
       <div class="canvas-card"><div class="small">Top 5 empresas con más proyectos</div><canvas id="cv-topproj" width="500" height="300"></canvas></div>
+    </div>
+  </section>
+
+  <section id="panel-calendario" class="panel">
+    <h2>Calendario de verificación (3 días)</h2>
+    <div class="note">Visualiza la ventana estándar de tres días asignada a cada proyecto habilitado y verifica quiénes son los responsables y el estado actual.</div>
+    <div class="row calendar-filters">
+      <input id="cal-search" class="inp" type="text" placeholder="Filtrar por empresa, proyecto o responsable..." style="flex:2;min-width:260px"/>
+      <select id="cal-estado" class="inp" style="min-width:160px">
+        <option value="">Estado</option>
+        <option value="APROBADO">Aprobado</option>
+        <option value="PARCIAL">Parcial</option>
+        <option value="OBSERVADO">Observado</option>
+      </select>
+    </div>
+    <div id="calendario-alertas" class="calendar-summary"></div>
+    <div class="calendar-grid">
+      <div class="calendar-header">
+        <div class="calendar-info-header">Proyecto</div>
+        <div id="calendario-dias" class="calendar-days"></div>
+      </div>
+      <div id="calendario-body" class="calendar-body"></div>
     </div>
   </section>
 
@@ -1559,6 +1619,10 @@ if(storedSheetUrl) SHEET_WEBAPP_URL = storedSheetUrl;
 let EXPORT_DIR_HANDLE = null;
 const DB_NAME = "ypfb-crm-db-v4"; const STORE = "fs";
 const BANNER_OK_STATES = new Set(["APROBADO","NO APLICA","SIN PERSONAL","SIN VEHICULO"]);
+const DAY_MS = 24*60*60*1000;
+const CALENDAR_WINDOW_DAYS = 10;
+const CALENDAR_REMINDER_HOUR = 8;
+let calendarReminderTimer = null;
 function idbOpen(){return new Promise((res,rej)=>{const req = indexedDB.open(DB_NAME,1);req.onupgradeneeded=e=>e.target.result.createObjectStore(STORE);req.onsuccess=e=>res(e.target.result);req.onerror=e=>rej(e.target.error);});}
 async function idbSet(k,v){const db=await idbOpen();return new Promise((res,rej)=>{const tx=db.transaction(STORE,"readwrite");tx.objectStore(STORE).put(v,k);tx.oncomplete=()=>res();tx.onerror=e=>rej(e.target.error);});}
 async function idbGet(k){const db=await idbOpen();return new Promise((res,rej)=>{const tx=db.transaction(STORE,"readonly");const rq=tx.objectStore(STORE).get(k);rq.onsuccess=()=>res(rq.result);rq.onerror=e=>rej(e.target.error);});}
@@ -2061,7 +2125,7 @@ function toggleAdminUI(isAdmin){
 function toggleResponsableUI(isResp){
   const active = document.querySelector('.sidebar .tab.active')?.dataset.tab;
   if(isResp){
-    let allowed=new Set(['cards','ypfb','resp']);
+    let allowed=new Set(['cards','ypfb','resp','calendario']);
     READONLY=true;
     if(USER_ROLES.has('SST')){
       ['empresa','ls025','personal','vehiculos','resumen'].forEach(t=>allowed.add(t));
@@ -2957,7 +3021,231 @@ function renderDashboard(){
 
   drawAllCharts();
   refreshEmpresaList();
+  renderCalendario();
 }
+
+function parseDateSafe(value, fallback){
+  if(value){
+    const d = new Date(value);
+    if(!Number.isNaN(d.getTime())) return d;
+  }
+  if(fallback){
+    const d = new Date(fallback);
+    if(!Number.isNaN(d.getTime())) return d;
+  }
+  return new Date();
+}
+function formatCalendarDate(date){
+  return date.toLocaleDateString(undefined,{day:'2-digit',month:'short',year:'numeric'});
+}
+function calendarEstadoClase(est){
+  if(est==="APROBADO" || est==="NO APLICA") return "ok";
+  if(est==="OBSERVADO") return "err";
+  if(est==="PARCIAL" || (est && est.startsWith("SIN"))) return "warn";
+  return "neutral";
+}
+function formatCalendarCountdown(proj, now){
+  if(proj.estado==="APROBADO") return "Verificación completada";
+  if(proj.due < now){
+    const diff = Math.max(1, Math.ceil((now - proj.due)/DAY_MS));
+    return diff===1 ? "Vencido hace 1 día" : `Vencido hace ${diff} días`;
+  }
+  const remaining = Math.max(0, Math.ceil((proj.due - now)/DAY_MS));
+  if(remaining===0) return "Vence hoy";
+  return `Restan ${remaining} día${remaining>1?"s":""}`;
+}
+function getCalendarProjectsData(){
+  const proyectos=[];
+  const now=new Date();
+  empresaKeys().forEach(clave=>{
+    const emp=DBCACHE[clave];
+    const empName=emp.empresa?.datos?.empresa || emp.empresa?.nombre || clave;
+    Object.entries(emp.proyectos||{}).forEach(([pid,pr])=>{
+      if(ES_RESPONSABLE && !USUARIO.admin && !esResponsableEnProyecto(pr, USUARIO.correo)) return;
+      const start=parseDateSafe(pr.proyecto?.creadoEn, pr.updatedAt);
+      const due=new Date(start.getTime());
+      due.setDate(due.getDate()+2);
+      due.setHours(23,59,59,999);
+      const estado=estadoProyecto(pr);
+      const responsables=pr.proyecto?.responsables||{};
+      const partes=[];
+      if(responsables.proyecto?.nombre) partes.push(`Resp. Proyecto: ${responsables.proyecto.nombre}`);
+      if(responsables.sst?.nombre) partes.push(`SST: ${responsables.sst.nombre}`);
+      if(responsables.ma?.nombre) partes.push(`MA: ${responsables.ma.nombre}`);
+      if(responsables.rse?.nombre) partes.push(`RSE: ${responsables.rse.nombre}`);
+      proyectos.push({
+        clave,
+        empresa:empName,
+        pid,
+        nombre:pr.proyecto?.nombre||pid,
+        start,
+        due,
+        estado,
+        responsablesTxt:partes.join(" · ") || "Sin responsables registrados"
+      });
+    });
+  });
+  proyectos.sort((a,b)=>{
+    if(a.due.getTime()!==b.due.getTime()) return a.due-b.due;
+    if(a.empresa!==b.empresa) return a.empresa.localeCompare(b.empresa);
+    return a.pid.localeCompare(b.pid);
+  });
+  return proyectos;
+}
+function updateCalendarReminder(projects){
+  const reminder=$("#calendar-reminder");
+  if(!reminder) return;
+  reminder.classList.remove('alert','warn');
+  const now=new Date();
+  const pendientes=projects.filter(p=>p.estado!=='APROBADO');
+  const vencidos=pendientes.filter(p=>p.due < now);
+  const proximos=pendientes.filter(p=>p.due >= now && (p.due - now) <= DAY_MS);
+  if(vencidos.length){
+    reminder.style.display='block';
+    reminder.classList.add('alert');
+    reminder.innerHTML=`<strong>Alerta:</strong> ${vencidos.length} proyecto(s) con verificación vencida.`;
+    if(now.getHours()>=CALENDAR_REMINDER_HOUR){
+      const key=now.toISOString().slice(0,10);
+      if(localStorage.getItem('calendarReminderShown')!==key){
+        localStorage.setItem('calendarReminderShown', key);
+      }
+    }
+  }else if(proximos.length){
+    reminder.style.display='block';
+    reminder.classList.add('warn');
+    reminder.innerHTML=`<strong>Recordatorio:</strong> ${proximos.length} proyecto(s) vencen en las próximas 24 horas.`;
+  }else if(pendientes.length){
+    reminder.style.display='block';
+    reminder.innerHTML=`<strong>Seguimiento:</strong> ${pendientes.length} proyecto(s) en ventana de verificación.`;
+  }else{
+    reminder.style.display='none';
+    reminder.innerHTML='';
+  }
+  ensureCalendarTimer();
+}
+function ensureCalendarTimer(){
+  if(calendarReminderTimer) return;
+  calendarReminderTimer=setInterval(()=>{
+    const proyectos=getCalendarProjectsData();
+    updateCalendarReminder(proyectos);
+  }, 15*60*1000);
+}
+function renderCalendario(){
+  const cont=$("#calendario-body");
+  const header=$("#calendario-dias");
+  const summary=$("#calendario-alertas");
+  if(!cont || !header) return;
+  const proyectos=getCalendarProjectsData();
+  const search=($("#cal-search")?.value||"").trim().toLowerCase();
+  const estadoFiltro=($("#cal-estado")?.value||"").trim();
+  const filtrados=proyectos.filter(p=>{
+    if(search){
+      const base=(p.empresa+" "+p.pid+" "+p.nombre+" "+p.responsablesTxt).toLowerCase();
+      if(!base.includes(search)) return false;
+    }
+    if(estadoFiltro && p.estado!==estadoFiltro) return false;
+    return true;
+  });
+  const now=new Date();
+  const windowStart=new Date(now.getFullYear(), now.getMonth(), now.getDate()-1);
+  windowStart.setHours(0,0,0,0);
+  const windowEnd=new Date(windowStart.getTime());
+  windowEnd.setDate(windowEnd.getDate()+CALENDAR_WINDOW_DAYS);
+  const totalMs=windowEnd.getTime()-windowStart.getTime();
+  header.style.setProperty('--calendar-cols', CALENDAR_WINDOW_DAYS);
+  header.innerHTML="";
+  for(let i=0;i<CALENDAR_WINDOW_DAYS;i++){
+    const day=new Date(windowStart.getTime()+i*DAY_MS);
+    const cell=document.createElement('div');
+    cell.className='calendar-day';
+    if(day.getDay()===0 || day.getDay()===6) cell.classList.add('weekend');
+    cell.innerHTML=`<span>${day.toLocaleDateString(undefined,{weekday:'short'})}</span><strong>${day.getDate()} ${day.toLocaleDateString(undefined,{month:'short'})}</strong>`;
+    header.appendChild(cell);
+  }
+  if(summary){
+    const pendientes=proyectos.filter(p=>p.estado!=='APROBADO');
+    const vencidos=pendientes.filter(p=>p.due < now);
+    const proximos=pendientes.filter(p=>p.due >= now && (p.due - now) <= DAY_MS);
+    if(!proyectos.length){
+      summary.textContent='No hay proyectos registrados en la base de datos actual.';
+    }else if(!pendientes.length){
+      summary.textContent='Todos los proyectos están aprobados dentro de la ventana de verificación.';
+    }else{
+      let texto=`${pendientes.length} proyecto(s) requieren seguimiento.`;
+      if(vencidos.length) texto+=` ${vencidos.length} con plazo vencido.`;
+      else if(proximos.length) texto+=` ${proximos.length} vencen en las próximas 24 horas.`;
+      summary.textContent=texto;
+    }
+  }
+  cont.innerHTML="";
+  if(!filtrados.length){
+    cont.innerHTML="<div class='calendar-empty'>No hay proyectos que coincidan con el filtro actual.</div>";
+    updateCalendarReminder(proyectos);
+    return;
+  }
+  filtrados.forEach(proj=>{
+    const row=document.createElement('div');
+    row.className='calendar-row';
+    const info=document.createElement('div');
+    info.className='calendar-info';
+    const badgeClass=proj.estado==='APROBADO'?'ok':proj.estado==='OBSERVADO'?'err':(proj.estado==='PARCIAL' || (proj.estado && proj.estado.startsWith('SIN')))?'warn':'muted';
+    const estadoBadge=`<span class="badge ${badgeClass}">${proj.estado}</span>`;
+    const statusTexto=formatCalendarCountdown(proj, now);
+    info.innerHTML=`<div class="calendar-title">${proj.empresa} · ${proj.pid}</div>
+      <div class="calendar-meta calendar-badge">${estadoBadge}<span>${proj.nombre}</span></div>
+      <div class="calendar-meta">${proj.responsablesTxt}</div>
+      <div class="calendar-meta">${formatCalendarDate(proj.start)} → ${formatCalendarDate(proj.due)} · ${statusTexto}</div>`;
+    row.appendChild(info);
+
+    const timeline=document.createElement('div');
+    timeline.className='calendar-timeline';
+    timeline.style.setProperty('--calendar-cols', CALENDAR_WINDOW_DAYS);
+    const dayGrid=document.createElement('div');
+    dayGrid.className='calendar-day-grid';
+    dayGrid.style.setProperty('--calendar-cols', CALENDAR_WINDOW_DAYS);
+    for(let i=0;i<CALENDAR_WINDOW_DAYS;i++){
+      const slot=document.createElement('div');
+      slot.className='calendar-day-slot';
+      const d=new Date(windowStart.getTime()+i*DAY_MS);
+      if(d.getDay()===0 || d.getDay()===6) slot.classList.add('weekend');
+      dayGrid.appendChild(slot);
+    }
+    timeline.appendChild(dayGrid);
+    const layer=document.createElement('div');
+    layer.className='calendar-bar-layer';
+    const overlaps = proj.start <= windowEnd && proj.due >= windowStart;
+    if(overlaps){
+      const startTime=Math.max(windowStart.getTime(), proj.start.getTime());
+      const endTime=Math.min(windowEnd.getTime(), proj.due.getTime());
+      const leftPercent=Math.max(0, Math.min(100, ((startTime - windowStart.getTime())/totalMs)*100));
+      const widthPercent=Math.max(2, ((endTime - startTime)/totalMs)*100);
+      const maxWidth=Math.max(0, 100 - leftPercent);
+      const bar=document.createElement('div');
+      bar.className=`calendar-bar ${calendarEstadoClase(proj.estado)}`;
+      bar.style.left=`${leftPercent}%`;
+      bar.style.width=`${Math.min(widthPercent, maxWidth)}%`;
+      bar.textContent='3 días verificación';
+      layer.appendChild(bar);
+    }else{
+      const outside=document.createElement('div');
+      outside.className='calendar-outside ' + (proj.due < windowStart ? 'past' : 'future');
+      layer.appendChild(outside);
+    }
+    const today=new Date();
+    if(today>=windowStart && today<=windowEnd){
+      const marker=document.createElement('div');
+      marker.className='calendar-marker today';
+      const percent=Math.max(0, Math.min(100, ((today.getTime()-windowStart.getTime())/totalMs)*100));
+      marker.style.left=`${percent}%`;
+      layer.appendChild(marker);
+    }
+    timeline.appendChild(layer);
+    row.appendChild(timeline);
+    cont.appendChild(row);
+  });
+  updateCalendarReminder(proyectos);
+}
+
 function renderYPFB(){
   const pend=[], rev=[];
   const correo=USUARIO.correo;
@@ -3009,6 +3297,8 @@ $("#search").addEventListener("input", renderDashboard);
 $("#filtro-tipo").addEventListener("change", renderDashboard);
 $("#filtro-estado").addEventListener("change", renderDashboard);
 $("#series-scale").addEventListener("change", drawAllCharts);
+const calSearch=$("#cal-search"); if(calSearch) calSearch.addEventListener("input", renderCalendario);
+const calEstado=$("#cal-estado"); if(calEstado) calEstado.addEventListener("change", renderCalendario);
 
 /* ================== Gráficos Canvas (sin librerías) ================== */
 function drawDonut(canvas, aprob, parcial, observ){
@@ -4615,6 +4905,7 @@ function switchTab(id){
   $$(".panel").forEach(p=>p.classList.remove("active"));
   document.getElementById("panel-"+id).classList.add("active");
   if(id==="dashboard" || id==="cards") renderDashboard();
+  if(id==="calendario") renderCalendario();
   if(id==="ypfb") renderYPFB();
   if(id==="resp") renderResponsable();
   if(id==="ls025") buildLs025();
