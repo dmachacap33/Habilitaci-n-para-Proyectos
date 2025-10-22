@@ -77,9 +77,11 @@ textarea{min-height:80px;resize:vertical}
 .aprob-banner.err{border-color:var(--err);color:var(--err)}
 .canvas-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
 .canvas-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px;box-shadow:8px 8px 16px #b3c5e5,-8px -8px 16px #ffffff}
-.canvas-card.review-card{padding:14px 16px;display:flex;flex-direction:column;gap:10px;background:linear-gradient(145deg,#f6faff,#edf3ff);box-shadow:12px 12px 24px rgba(11,41,89,0.08),-8px -8px 18px rgba(255,255,255,0.9)}
-.canvas-card.review-card .small{font-size:17px;font-weight:700;color:#063066}
-.chart-scroll{position:relative;max-height:320px;min-height:260px;overflow:auto;padding-right:6px}
+
+.canvas-card.review-card{padding:18px 20px;display:flex;flex-direction:column;gap:16px;background:linear-gradient(145deg,#f4f8ff,#e7efff);box-shadow:18px 18px 36px rgba(11,41,89,0.08),-12px -12px 28px rgba(255,255,255,0.9)}
+.canvas-card.review-card .small{font-size:19px;font-weight:700;color:#042b63;letter-spacing:.2px}
+.chart-scroll{position:relative;max-height:420px;min-height:360px;overflow:auto;padding-right:8px}
+
 .chart-scroll::-webkit-scrollbar{width:8px}
 .chart-scroll::-webkit-scrollbar-track{background:rgba(15,47,102,0.08);border-radius:999px}
 .chart-scroll::-webkit-scrollbar-thumb{background:rgba(0,85,165,0.35);border-radius:999px}
@@ -3023,14 +3025,14 @@ function drawDonut(canvas, aprob, parcial, observ){
 }
 function drawRespChart(canvas, labels, values){
 
-  const padTop=36, padBottom=36, padRight=40;
-  const minRow=34;
+  const padTop=44, padBottom=48, padRight=48;
+  const minRow=58;
   const desiredHeight=Math.max(padTop + padBottom + labels.length*minRow, 300);
   if(canvas.height !== desiredHeight){ canvas.height = desiredHeight; }
   const ctx=canvas.getContext("2d"); const W=canvas.width, H=canvas.height; ctx.clearRect(0,0,W,H);
 
-  const padLeft=Math.max(120, Math.min(260, W*0.42));
-  const rowBgX=Math.max(16, padLeft-180);
+  const padLeft=Math.max(140, Math.min(280, W*0.45));
+  const rowBgX=Math.max(16, padLeft-220);
   const rowBgWidth=Math.max(0, W-rowBgX-padRight);
   const barMaxWidth=Math.max(0, W-padLeft-padRight);
 
@@ -3043,8 +3045,8 @@ function drawRespChart(canvas, labels, values){
   const max=Math.max(1, ...values);
   const rowCount=Math.max(1, labels.length);
   const rowH=(H-padTop-padBottom)/rowCount;
-  const baseFont="600 13px 'Inter', system-ui";
-  const valueFont="600 12px 'Inter', system-ui";
+  const baseFont="600 15px 'Inter', system-ui";
+  const valueFont="700 13px 'Inter', system-ui";
 
   ctx.textBaseline="middle";
   ctx.textAlign="left";
@@ -3082,34 +3084,34 @@ function drawRespChart(canvas, labels, values){
   labels.forEach((label,i)=>{
     const rowTop=padTop + i*rowH;
     const centerY=rowTop + rowH/2;
-    const bgH=rowH*0.84;
+    const bgH=rowH*0.82;
     const bgY=centerY - bgH/2;
-    const bgColor=i%2===0 ? "rgba(0,85,165,0.12)" : "rgba(0,59,126,0.08)";
+    const bgColor=i%2===0 ? "rgba(0,85,165,0.16)" : "rgba(0,59,126,0.1)";
     fillRoundedRect(rowBgX, bgY, rowBgWidth, bgH, 16, bgColor);
 
-    const iconX=rowBgX + 18;
+    const iconX=rowBgX + 24;
     ctx.beginPath();
     ctx.fillStyle="rgba(0,85,165,0.28)";
-    ctx.arc(iconX, centerY, 7, 0, Math.PI*2);
+    ctx.arc(iconX, centerY, 9, 0, Math.PI*2);
     ctx.fill();
     ctx.beginPath();
     ctx.fillStyle="#0055a5";
-    ctx.arc(iconX, centerY, 4, 0, Math.PI*2);
+    ctx.arc(iconX, centerY, 5, 0, Math.PI*2);
     ctx.fill();
 
-    const labelArea=Math.max(40, padLeft - (rowBgX + 46));
+    const labelArea=Math.max(60, padLeft - (rowBgX + 56));
     const labelText=fitLabel(label, labelArea);
-    ctx.fillStyle="rgba(6,42,99,0.88)";
+    ctx.fillStyle="rgba(6,42,99,0.9)";
     ctx.textAlign="left";
     ctx.font=baseFont;
-    ctx.fillText(labelText, rowBgX + 36, centerY);
+    ctx.fillText(labelText, rowBgX + 46, centerY);
 
     const value=values[i]||0;
     const ratio=value/max;
     const hasValue=value>0;
     const rawWidth=barMaxWidth*ratio;
     const barWidth=hasValue ? Math.max(0, Math.min(barMaxWidth, Math.max(6, rawWidth))) : 0;
-    const barHeight=Math.min(32, rowH*0.55);
+    const barHeight=Math.min(42, rowH*0.58);
     const barY=centerY - barHeight/2;
 
     if(hasValue){
@@ -3118,31 +3120,31 @@ function drawRespChart(canvas, labels, values){
       gradient.addColorStop(1,"#38bdf8");
       ctx.save();
       ctx.shadowColor="rgba(37,99,235,0.25)";
-      ctx.shadowBlur=14;
+      ctx.shadowBlur=18;
       fillRoundedRect(padLeft, barY, barWidth, barHeight, barHeight/2, gradient);
       ctx.restore();
     }else{
-      fillRoundedRect(padLeft, barY, 12, barHeight, barHeight/2, "rgba(148,163,184,0.35)");
+      fillRoundedRect(padLeft, barY, 16, barHeight, barHeight/2, "rgba(148,163,184,0.35)");
     }
 
     const valText=String(value);
     ctx.font=valueFont;
     const metrics=ctx.measureText(valText);
-    const pillPadding=9;
+    const pillPadding=12;
     const pillWidth=Math.round(metrics.width + pillPadding*2);
-    const pillHeight=24;
+    const pillHeight=30;
     let pillX;
 
-    if(hasValue && barWidth>pillWidth+28){
-      pillX=padLeft + barWidth - pillWidth - 12;
-      fillRoundedRect(pillX, centerY - pillHeight/2, pillWidth, pillHeight, pillHeight/2, "rgba(255,255,255,0.92)");
-      ctx.fillStyle="#0f1f46";
+    if(hasValue && barWidth>pillWidth+36){
+      pillX=padLeft + barWidth - pillWidth - 16;
+      fillRoundedRect(pillX, centerY - pillHeight/2, pillWidth, pillHeight, pillHeight/2, "rgba(255,255,255,0.94)");
+      ctx.fillStyle="#061d49";
     }else{
-      pillX=padLeft + barWidth + 14;
+      pillX=padLeft + barWidth + 18;
       if(pillX + pillWidth > W - padRight){
         pillX=W - padRight - pillWidth;
       }
-      fillRoundedRect(pillX, centerY - pillHeight/2, pillWidth, pillHeight, pillHeight/2, "rgba(0,85,165,0.15)");
+      fillRoundedRect(pillX, centerY - pillHeight/2, pillWidth, pillHeight, pillHeight/2, "rgba(0,85,165,0.2)");
       ctx.fillStyle="#0b2f66";
     }
 
