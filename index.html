@@ -3548,9 +3548,13 @@ function abrirProyecto(clave, pid, ro=false){
 /* ================== LS.025 UI ================== */
 function lsRoleMatches(bloque, rol){
   if(!rol) return true;
-  if(rol==="MA") return bloque.startsWith("Medio Ambiente");
+  if(rol==="MA") return bloque.startsWith("Medio Ambiente") || bloque.startsWith("Estándares / Procedimientos / Planes");
   if(rol==="RSE") return bloque.startsWith("Social");
-  if(rol==="SEG") return !(bloque.startsWith("Medio Ambiente") || bloque.startsWith("Social"));
+  if(rol==="SEG") return !(
+    bloque.startsWith("Medio Ambiente") ||
+    bloque.startsWith("Social") ||
+    bloque.startsWith("Estándares / Procedimientos / Planes")
+  );
   return true;
 }
 function buildLs025(){
