@@ -77,6 +77,13 @@ textarea{min-height:80px;resize:vertical}
 .aprob-banner.err{border-color:var(--err);color:var(--err)}
 .canvas-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
 .canvas-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px;box-shadow:8px 8px 16px #b3c5e5,-8px -8px 16px #ffffff}
+.canvas-card.review-card{padding:14px 16px;display:flex;flex-direction:column;gap:10px;background:linear-gradient(145deg,#f6faff,#edf3ff);box-shadow:12px 12px 24px rgba(11,41,89,0.08),-8px -8px 18px rgba(255,255,255,0.9)}
+.canvas-card.review-card .small{font-size:17px;font-weight:700;color:#063066}
+.chart-scroll{position:relative;max-height:320px;min-height:260px;overflow:auto;padding-right:6px}
+.chart-scroll::-webkit-scrollbar{width:8px}
+.chart-scroll::-webkit-scrollbar-track{background:rgba(15,47,102,0.08);border-radius:999px}
+.chart-scroll::-webkit-scrollbar-thumb{background:rgba(0,85,165,0.35);border-radius:999px}
+.chart-scroll canvas{display:block;width:100%}
 #panel-dashboard{font-size:16px}
 #panel-dashboard .small{font-size:16px}
 #panel-dashboard canvas{height:260px}
@@ -343,10 +350,10 @@ body.mobile-viewport header label,body.mobile-viewport header .inp,body.mobile-v
 
     <div class="canvas-grid" style="margin-top:12px">
       <div class="canvas-card"><div class="small">Global A/P/O</div><canvas id="cv-donut" width="500" height="300"></canvas></div>
-      <div class="canvas-card"><div class="small">Revisiones SST</div><canvas id="cv-resp-sst" width="500" height="300"></canvas></div>
-      <div class="canvas-card"><div class="small">Revisiones MA</div><canvas id="cv-resp-ma" width="500" height="300"></canvas></div>
-      <div class="canvas-card"><div class="small">Revisiones RSE</div><canvas id="cv-resp-rse" width="500" height="300"></canvas></div>
-      <div class="canvas-card"><div class="small">Responsables de proyecto asignados</div><canvas id="cv-resp-proy" width="500" height="300"></canvas></div>
+      <div class="canvas-card review-card"><div class="small">Revisiones SST</div><div class="chart-scroll"><canvas id="cv-resp-sst" width="500" height="300"></canvas></div></div>
+      <div class="canvas-card review-card"><div class="small">Revisiones MA</div><div class="chart-scroll"><canvas id="cv-resp-ma" width="500" height="300"></canvas></div></div>
+      <div class="canvas-card review-card"><div class="small">Revisiones RSE</div><div class="chart-scroll"><canvas id="cv-resp-rse" width="500" height="300"></canvas></div></div>
+      <div class="canvas-card review-card"><div class="small">Responsables de proyecto asignados</div><div class="chart-scroll"><canvas id="cv-resp-proy" width="500" height="300"></canvas></div></div>
       <div class="canvas-card">
         <div class="row" style="align-items:center;justify-content:space-between;">
           <div id="cv-series-title" class="small">Proyectos / mes (creados vs. aprobados)</div>
@@ -3307,10 +3314,25 @@ function drawAllCharts(){
       });
     });
   });
-  const cS=$("#cv-resp-sst"); if(cS) drawRespChart(cS, Array.from(sstMap.keys()), Array.from(sstMap.values()));
-  const cM=$("#cv-resp-ma"); if(cM) drawRespChart(cM, Array.from(maMap.keys()), Array.from(maMap.values()));
-  const cR=$("#cv-resp-rse"); if(cR) drawRespChart(cR, Array.from(rseMap.keys()), Array.from(rseMap.values()));
-  const cP=$("#cv-resp-proy"); if(cP) drawRespChart(cP, Array.from(projMap.keys()), Array.from(projMap.values()));
+  function mapToSorted(map){
+    const entries=Array.from(map.entries());
+    entries.sort((a,b)=>{
+      if(b[1]!==a[1]) return b[1]-a[1];
+      return String(a[0]).localeCompare(String(b[0]));
+    });
+    return {
+      labels:entries.map(([label])=>label),
+      values:entries.map(([,value])=>value)
+    };
+  }
+  const sstData=mapToSorted(sstMap);
+  const maData=mapToSorted(maMap);
+  const rseData=mapToSorted(rseMap);
+  const projData=mapToSorted(projMap);
+  const cS=$("#cv-resp-sst"); if(cS) drawRespChart(cS, sstData.labels, sstData.values);
+  const cM=$("#cv-resp-ma"); if(cM) drawRespChart(cM, maData.labels, maData.values);
+  const cR=$("#cv-resp-rse"); if(cR) drawRespChart(cR, rseData.labels, rseData.values);
+  const cP=$("#cv-resp-proy"); if(cP) drawRespChart(cP, projData.labels, projData.values);
 
   // Series creados vs aprobados
   const scale=$("#series-scale")?$("#series-scale").value:"month";
