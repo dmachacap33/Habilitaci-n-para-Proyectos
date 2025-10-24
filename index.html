@@ -1792,7 +1792,7 @@ if (!conversation) {
   conversation = [{
     role: 'model',
     parts: [{
-      text: 'Por favor, cuéntame TODO sobre el proyecto: de qué se trata, dónde se hará (estación/DDV/terminal, ciudad/país), fechas y duración, actividades principales (p. ej., conducción, trabajos en caliente, izaje, alturas, espacio confinado, electricidad, arenado, hot tap, excavación), si habrá campamentos y rutas, cuántas personas y roles, si hay conductores u operadores de equipo pesado, si manipulan sustancias químicas o alimentos, si trabajarán fuera de Bolivia o con personal extranjero, vehículos/equipos previstos y cualquier tema ambiental (licencias, desmonte, áridos, ruido/emisiones).'
+      text: 'Hola, soy iDavid. Para ayudarte necesito una visión completa: ¿es carpeta de inicio, actualización u otro trámite? Cuéntame objetivo del proyecto, ubicación exacta, duración estimada, actividades clave (conducción, altura, caliente, fumigación, alimentos, etc.), cantidad y roles del personal, vehículos o equipos que usarán, si intervendrán medio ambiente (desmonte, licencias, residuos) y si participa personal externo o en el exterior. Cuando tenga claridad iremos bloque por bloque.'
     }]
   }];
 } else {
@@ -2600,6 +2600,405 @@ const CATALOG_LS025 = [
   {id:"L094", bloque:"Social", txt:"Capacitación en Código de Conducta y Política SSMS y RSE", req:true},
   {id:"L095", bloque:"Social", txt:"Plan de Relacionamiento Comunitario específico", req:false},
 ];
+
+const IA_RULES = `
+Reglas de interpretación rápida para iDavid:
+- Antes de recomendar ítems, identifica el tipo de trámite: "Carpeta de inicio" (alta nueva), "Actualización de personal", "Actualización de vehículos/equipos", "Proyecto puntual" u otro. Si el usuario no lo aclara, pregúntalo.
+- Carpeta de inicio: exige siempre los pilares de SST (L001-L009, L013, L015-L028, L047-L058), Medio Ambiente (L067-L082) y Responsabilidad Social (L092-L094). Valida además planes de campamentos, emergencias y logística (L003-L005).
+- Solo personal: enfócate en los requisitos de identificación, cursos, vacunas y seguros (L015-L058, L047-L052). No pidas documentación de Medio Ambiente ni de RSE a menos que el usuario indique que también entregará el proyecto completo.
+- Solo vehículos o equipos: valida listados, checklists, seguros y monitoreo (L059-L066). Evita pedir documentos de personal o MA, salvo que el usuario confirme que el trámite los incluye.
+- Actividades con fumigación/plaguicidas requieren L014.
+- Si se manipulan alimentos, incluye L053 y L054.
+- Personal mayor a 90 días necesita L029-L031. Menor a 90 días requiere L032-L035. Consultores externos: L036-L038.
+- Trabajo fuera de Bolivia: L039-L042. Personal extranjero en Bolivia: L043-L046.
+- Conductores u operadores de equipo pesado: L050-L052, más seguros y vehículos correspondientes.
+- Riesgos a la salud relevantes (conducción, operaciones críticas) activan L048 y L049.
+- Vehículos livianos/semi-pesados y equipo pesado requieren los bloques L059-L066.
+- Actividades no rutinarias con impacto ambiental exigen validar licencias, monitoreos y procedimientos (L067-L091). Pregunta por manipulación de sustancias peligrosas, desmonte, áridos y controles específicos.
+- Siempre confirma con el usuario antes de cerrar: repasa condiciones especiales (fases, ubicaciones, duración, terceros, subcontratos) y aclara cualquier "no aplica".
+`;
+
+const LS025_REFERENCE = `
+L001 – Requisitos Generales del Proyecto (Mandatorio)
+Descripción: Descripción y explicación de actividades, ubicación, áreas de influencia, tiempos y tareas del proyecto.
+Aplicación: Siempre aplica a cualquier proyecto.
+
+L002 – Requisitos Generales del Proyecto (Condicional)
+Descripción: Permiso de Trabajo No Rutinario FS.059 u orden de trabajo emitido por YPFB Transporte.
+Aplicación: Solicítalo solo si hay interrupción de operaciones o severidad > 2 según Anexo 4 PS.040.
+
+L003 – Requisitos Generales del Proyecto (Mandatorio)
+Descripción: Cronograma con tiempos, responsables y turnos. Debe incluir relevos si supera 21 días y validación de Talento Humano.
+Aplicación: Obligatorio cuando hay personal asignado o rotaciones.
+
+L004 – Requisitos Generales del Proyecto (Mandatorio)
+Descripción: Plan de movilización e instalación de campamentos con rutas, medios, logística, descansos, inspecciones y alimentación.
+Aplicación: Aplica a proyectos con desplazamientos o campamentos.
+
+L005 – Requisitos Generales del Proyecto (Mandatorio)
+Descripción: Plan de preparación y respuesta ante emergencias alineado al ITS.016 con escenarios relevantes.
+Aplicación: Siempre requerido para gestionar emergencias del proyecto.
+
+L006 – Requisitos Generales del Proyecto (Mandatorio)
+Descripción: Programa de gestión de Seguridad y Salud en el Trabajo conforme a la NTS.009.
+Aplicación: Obligatorio para toda organización formal.
+
+L007 – Requisitos Generales del Proyecto (Mandatorio)
+Descripción: Evaluación de riesgos SSO FS.082 listando actividades, valoración y nivel de riesgo.
+Aplicación: Siempre aplica, debe usar formato YPFB Transporte.
+
+L008 – Requisitos Generales del Proyecto (Mandatorio)
+Descripción: Tratamiento de riesgos FS.072 con controles, mitigación y contingencias.
+Aplicación: Complementa L007 para mantener riesgos controlados.
+
+L009 – Requisitos Generales del Proyecto (Mandatorio)
+Descripción: Evidencia de participación de trabajadores en gestión de riesgos y oportunidades.
+Aplicación: Requerido en proyectos con personal involucrado.
+
+L010 – Requisitos Generales del Proyecto (Condicional)
+Descripción: Procedimientos específicos operativos, de MA y seguridad relevantes a la actividad.
+Aplicación: Solicítalo cuando existan tareas críticas o instrucciones particulares.
+
+L011 – Requisitos Generales del Proyecto (Condicional)
+Descripción: Certificados de calibración de medidores de gases con código, serie y número interno vigentes (cada 6 meses).
+Aplicación: Proyectos que utilizan detectores de gases.
+
+L012 – Requisitos Generales del Proyecto (Condicional)
+Descripción: Checklists de inspección de herramientas eléctricas, manuales y neumáticas.
+Aplicación: Cuando se emplean dichas herramientas.
+
+L013 – Requisitos Generales del Proyecto (Mandatorio)
+Descripción: Hojas de datos de seguridad de materiales (HDSM) con rombo NFPA, medidas de seguridad y ambientales.
+Aplicación: Siempre que se manejen sustancias.
+
+L014 – Requisitos Generales del Proyecto (Condicional)
+Descripción: Permiso SENASAG para uso de pesticidas y plaguicidas.
+Aplicación: Solo proyectos de fumigación o manejo de plaguicidas.
+
+L015 – Requisitos Generales del Personal (Mandatorio)
+Descripción: Planilla detallada con cargos, exámenes, vacunas, cursos y documentación de control.
+Aplicación: Requerido cuando hay más de 5 trabajadores asignados.
+
+L016 – Requisitos Generales del Personal (Condicional)
+Descripción: Organigrama del proyecto o servicio con detalle de personal.
+Aplicación: Útil para proyectos con múltiples roles o jerarquías.
+
+L017 – Requisitos Generales del Personal (Condicional)
+Descripción: Manual de funciones o perfiles de cargo para corroborar competencias en SST.
+Aplicación: Cuando se necesita validar responsabilidades específicas.
+
+L018 – Requisitos Generales del Personal (Mandatorio)
+Descripción: Carnet de identidad vigente para todo el personal.
+Aplicación: Siempre aplica.
+
+L019 – Requisitos Generales del Personal (Mandatorio)
+Descripción: Curso de primeros auxilios mínimo 8 horas impartido por médico o instructor vigente (vigencia 3 años).
+Aplicación: Todos los trabajadores.
+
+L020 – Requisitos Generales del Personal (Mandatorio)
+Descripción: Curso de control de incendios y manejo de extintores con práctica y duración mínima de 2 horas (vigencia 3 años).
+Aplicación: Todo el personal.
+
+L021 – Requisitos Generales del Personal (Mandatorio)
+Descripción: Curso de uso de EPP de al menos 2 horas impartido por supervisor certificado (vigencia 3 años).
+Aplicación: Todos los trabajadores.
+
+L022 – Requisitos Generales del Personal (Mandatorio)
+Descripción: Curso de ergonomía para identificar, analizar y reducir riesgos (vigencia 3 años).
+Aplicación: Todo el personal.
+
+L023 – Requisitos Generales del Personal (Mandatorio)
+Descripción: Curso de comunicación de peligros sobre señalética, rombo NFPA y hojas de datos (vigencia 3 años).
+Aplicación: Todo el personal.
+
+L024 – Requisitos Generales del Personal (Mandatorio)
+Descripción: Registro de dotación de EPP firmado y validado, cumpliendo RCO01.
+Aplicación: Todo el personal involucrado.
+
+L025 – Requisitos Generales del Personal (Mandatorio)
+Descripción: Cursos específicos según la tarea (espacio confinado, altura, soldadura, etc.).
+Aplicación: Según actividades asignadas.
+
+L026 – Requisitos Generales del Personal (Mandatorio)
+Descripción: Certificado de vacuna fiebre amarilla (1 dosis).
+Aplicación: Todo el personal.
+
+L027 – Requisitos Generales del Personal (Mandatorio)
+Descripción: Vacuna difteria y tétanos con esquema completo y refuerzos cada 10 años.
+Aplicación: Todo el personal.
+
+L028 – Requisitos Generales del Personal (Mandatorio)
+Descripción: Vacuna de influenza anual.
+Aplicación: Todo el personal.
+
+L029 – Personal mayor a 90 días (Mandatorio)
+Descripción: Contrato de trabajo visado por el Ministerio de Trabajo.
+Aplicación: Personal asignado por más de 90 días.
+
+L030 – Personal mayor a 90 días (Mandatorio)
+Descripción: Seguro médico con afiliación y aportes a caja de salud.
+Aplicación: Personal mayor a 90 días.
+
+L031 – Personal mayor a 90 días (Mandatorio)
+Descripción: Planilla de aporte y afiliación a la Gestora Pública (<=2 meses).
+Aplicación: Personal mayor a 90 días.
+
+L032 – Personal menor a 90 días (Mandatorio)
+Descripción: Contrato de trabajo firmado por ambas partes.
+Aplicación: Personal con contratos menores a 90 días.
+
+L033 – Personal menor a 90 días (Mandatorio)
+Descripción: Seguro de salud privado mínimo 10.000 USD, salvo afiliación vigente a ente gestor.
+Aplicación: Personal menor a 90 días sin afiliación.
+
+L034 – Personal menor a 90 días (Mandatorio)
+Descripción: Seguro contra accidentes mínimo 10.000 USD, salvo cobertura por gestor público.
+Aplicación: Personal menor a 90 días sin afiliación.
+
+L035 – Personal menor a 90 días (Mandatorio)
+Descripción: Seguro de vida mínimo 20.000 USD, salvo cobertura por gestor público.
+Aplicación: Personal menor a 90 días sin afiliación.
+
+L036 – Consultores externos (Mandatorio)
+Descripción: Seguro de salud privado mínimo 10.000 USD.
+Aplicación: Consultores externos sin afiliación a ente gestor.
+
+L037 – Consultores externos (Mandatorio)
+Descripción: Seguro contra accidentes mínimo 10.000 USD.
+Aplicación: Consultores externos.
+
+L038 – Consultores externos (Mandatorio)
+Descripción: Seguro de vida mínimo 20.000 USD.
+Aplicación: Consultores externos.
+
+L039 – Personal fuera de Bolivia (Mandatorio)
+Descripción: Contrato visado por Ministerio de Trabajo para personal en proyectos fuera del país.
+Aplicación: Personal asignado en Arica u otros países.
+
+L040 – Personal fuera de Bolivia (Mandatorio)
+Descripción: Seguro de salud internacional hasta 100.000 USD o seguro de viajero.
+Aplicación: Personal fuera de Bolivia.
+
+L041 – Personal fuera de Bolivia (Mandatorio)
+Descripción: Seguro contra accidentes con cobertura al proyecto (mínimo 10.000 USD).
+Aplicación: Personal fuera de Bolivia.
+
+L042 – Personal fuera de Bolivia (Mandatorio)
+Descripción: Seguro de vida mínimo 20.000 USD.
+Aplicación: Personal fuera de Bolivia.
+
+L043 – Personal extranjero en Bolivia (Mandatorio)
+Descripción: Contrato visado (>90 días) o contrato conforme a legislación del país de origen (≤90 días).
+Aplicación: Personal extranjero en territorio boliviano.
+
+L044 – Personal extranjero en Bolivia (Mandatorio)
+Descripción: Seguro de salud internacional hasta 100.000 USD.
+Aplicación: Personal extranjero en Bolivia.
+
+L045 – Personal extranjero en Bolivia (Mandatorio)
+Descripción: Seguro contra accidentes mínimo 10.000 USD.
+Aplicación: Personal extranjero en Bolivia.
+
+L046 – Personal extranjero en Bolivia (Mandatorio)
+Descripción: Seguro de vida mínimo 20.000 USD.
+Aplicación: Personal extranjero en Bolivia.
+
+L047 – Bioseguridad (Mandatorio)
+Descripción: Certificado de vacunación COVID-19 con mínimo 3 dosis.
+Aplicación: Todo el personal.
+
+L048 – Riesgos a la salud (Mandatorio)
+Descripción: Evaluación médica de aptitud FS.100 según guía PS.029.
+Aplicación: Personal que realiza actividades de riesgo.
+
+L049 – Riesgos a la salud (Mandatorio)
+Descripción: Exámenes médicos específicos asociados al riesgo (FS.100).
+Aplicación: Personal en actividades críticas.
+
+L050 – Conductores/Operadores (Mandatorio)
+Descripción: Curso de conducción defensiva y manejo 4x4 dictado por instructores habilitados.
+Aplicación: Todos los conductores asignados.
+
+L051 – Conductores/Operadores (Mandatorio)
+Descripción: Licencia de tránsito vigente.
+Aplicación: Conductores.
+
+L052 – Conductores/Operadores (Mandatorio)
+Descripción: Certificados de operador de equipo pesado o licencias equivalentes.
+Aplicación: Operadores de equipo pesado.
+
+L053 – Manipulación de alimentos (Mandatorio)
+Descripción: Carnet sanitario vigente (vigencia 1 año).
+Aplicación: Personal que manipula alimentos.
+
+L054 – Manipulación de alimentos (Mandatorio)
+Descripción: Curso de BPM/BPH o inocuidad alimentaria.
+Aplicación: Manipuladores de alimentos.
+
+L055 – Supervisor SSMS/Salud (Mandatorio)
+Descripción: Currículum con respaldos y certificación SSMS40 del personal crítico.
+Aplicación: Supervisores SSMS y personal de salud.
+
+L056 – Supervisor SSMS/Salud (Mandatorio)
+Descripción: Certificación del curso SSMS40 vigente.
+Aplicación: Personal SSMS.
+
+L057 – Supervisor SSMS/Salud (Mandatorio)
+Descripción: Credencial de registro nacional según RM 595/16.
+Aplicación: Profesionales de SST.
+
+L058 – Supervisor SSMS/Salud (Mandatorio)
+Descripción: Matrícula profesional y registro del colegio médico.
+Aplicación: Personal médico.
+
+L059 – Vehículos livianos/semi-pesados (Mandatorio)
+Descripción: Planilla con lista de vehículos, placa, tipo y modelo.
+Aplicación: Cuando se asignan vehículos.
+
+L060 – Vehículos livianos/semi-pesados (Mandatorio)
+Descripción: Checklist aprobado por YPFB Transporte (vigencia 1 mes) con validación de antigüedad.
+Aplicación: Vehículos asignados.
+
+L061 – Vehículos livianos/semi-pesados (Mandatorio)
+Descripción: Certificado de registro de propiedad vehicular (CRPVA/RUAT) actualizado.
+Aplicación: Vehículos.
+
+L062 – Vehículos livianos/semi-pesados (Mandatorio)
+Descripción: Inspección técnica vehicular e SOAT vigentes (1 año).
+Aplicación: Vehículos.
+
+L063 – Vehículos livianos/semi-pesados (Mandatorio)
+Descripción: Póliza de responsabilidad civil contractual mínima 30.000 USD.
+Aplicación: Vehículos del proyecto.
+
+L064 – Vehículos livianos/semi-pesados (Mandatorio)
+Descripción: Certificado de monitoreo satelital instalado.
+Aplicación: Vehículos del proyecto.
+
+L065 – Equipo pesado (Mandatorio)
+Descripción: Certificación por ente acreditado y pólizas de seguro del equipo.
+Aplicación: Equipos pesados.
+
+L066 – Equipo pesado (Mandatorio)
+Descripción: Checklist aprobado por YPFB Transporte (vigencia 1 mes).
+Aplicación: Equipos pesados.
+
+L067 – Medio Ambiente (Mandatorio en actividades no rutinarias)
+Descripción: Plan de medio ambiente que describa la gestión ambiental del proyecto.
+Aplicación: Proyectos con impactos ambientales significativos.
+
+L068 – Medio Ambiente (Mandatorio en actividades no rutinarias)
+Descripción: Listado de aspectos ambientales FS-082 con riesgos en condiciones normales, anormales y emergencias.
+Aplicación: Igual que L067.
+
+L069 – Medio Ambiente (Condicional)
+Descripción: Registro de medidas de control FS-072 para riesgos ambientales altos o muy altos.
+Aplicación: Cuando existan riesgos altos detectados.
+
+L070 – Medio Ambiente (Mandatorio)
+Descripción: Licencia ambiental de YPFB Transporte para el proyecto.
+Aplicación: Actividades que requieran licencia vigente.
+
+L071 – Medio Ambiente (Mandatorio)
+Descripción: Licencia ambiental o permiso similar de la contratista.
+Aplicación: Contratistas con obligaciones ambientales.
+
+L072 – Medio Ambiente (Condicional)
+Descripción: Licencia de actividad con sustancias peligrosas (LASP) de YPFB Transporte si manipulan sustancias.
+Aplicación: Manejo de sustancias peligrosas.
+
+L073 – Medio Ambiente (Condicional)
+Descripción: LASP de la contratista incluyendo todas las sustancias a utilizar.
+Aplicación: Contratistas que manipulan sustancias peligrosas.
+
+L074 – Medio Ambiente (Mandatorio)
+Descripción: Resultados de medición de gases de combustión para fuentes fijas y móviles (anual).
+Aplicación: Equipos con emisiones.
+
+L075 – Medio Ambiente (Condicional)
+Descripción: Resultados de medición de ruido para fuentes fijas y móviles; cronograma si supera 6 meses.
+Aplicación: Cuando existan fuentes ruidosas o equipos pesados.
+
+L076 – Medio Ambiente (Condicional)
+Descripción: Permiso de desmonte de YPFB Transporte para áreas no intervenidas.
+Aplicación: Proyectos con necesidad de desmonte.
+
+L077 – Medio Ambiente (Condicional)
+Descripción: Certificado de habilitación de empresa desmontadora otorgado por ABT.
+Aplicación: Cuando se realice desmonte con terceros.
+
+L078 – Medio Ambiente (Condicional)
+Descripción: Licencia ambiental o autorización municipal para proveedores de áridos y agregados.
+Aplicación: Cuando se usen áridos/agregados externos.
+
+L079 – Medio Ambiente (Condicional)
+Descripción: Registro de uso de sustancias agotadoras de ozono y personal autorizado.
+Aplicación: Trabajos con refrigerantes.
+
+L080 – Medio Ambiente (Mandatorio)
+Descripción: Tabla resumen de compromisos PPM-PASA provista por YPFB Transporte.
+Aplicación: Proyectos sujetos a estudio ambiental.
+
+L081 – Estándares/Procedimientos (Mandatorio)
+Descripción: Procedimiento de conservación de biodiversidad (flora y fauna).
+Aplicación: Proyectos que puedan afectar biodiversidad.
+
+L082 – Estándares/Procedimientos (Mandatorio)
+Descripción: Procedimiento de gestión de residuos alineado a YPFB Transporte.
+Aplicación: Todo proyecto con generación de residuos.
+
+L083 – Estándares/Procedimientos (Condicional)
+Descripción: Procedimientos preventivos ambientales alineados a YPFB Transporte.
+Aplicación: Cuando se requieran controles adicionales.
+
+L084 – Estándares/Procedimientos (Condicional)
+Descripción: Gestión de aguas residuales y pluviales alineada a YPFB Transporte.
+Aplicación: Proyectos con descargas o manejo de aguas.
+
+L085 – Estándares/Procedimientos (Condicional)
+Descripción: Manejo de aguas de pruebas hidrostáticas.
+Aplicación: Proyectos con pruebas hidrostáticas.
+
+L086 – Estándares/Procedimientos (Condicional)
+Descripción: Prevención y control de derrames de hidrocarburos.
+Aplicación: Proyectos con riesgo de derrames.
+
+L087 – Estándares/Procedimientos (Condicional)
+Descripción: Preservación de recursos culturales y arqueológicos.
+Aplicación: Cuando exista riesgo arqueológico.
+
+L088 – Estándares/Procedimientos (Condicional)
+Descripción: Prevención y control de la contaminación atmosférica (fuentes fijas y móviles).
+Aplicación: Proyectos con emisiones relevantes.
+
+L089 – Estándares/Procedimientos (Condicional)
+Descripción: Procedimiento de medición de ruido en fuentes fijas y móviles.
+Aplicación: Cuando se requiera monitoreo continuo.
+
+L090 – Estándares/Procedimientos (Condicional)
+Descripción: Manejo de asbestos y PCB's.
+Aplicación: Solo si se manipulan estos materiales.
+
+L091 – Estándares/Procedimientos (Condicional)
+Descripción: Procedimiento de desmonte alineado a YPFB Transporte.
+Aplicación: Cuando exista desmonte.
+
+L092 – Social (Mandatorio)
+Descripción: Código de conducta alineado a YPFB Transporte y registro de inducción.
+Aplicación: Proyectos con interacción comunitaria o personal asignado.
+
+L093 – Social (Mandatorio)
+Descripción: Política de SSM y RSE alineada a YPFB Transporte con evidencia de difusión.
+Aplicación: Proyectos con impacto social.
+
+L094 – Social (Mandatorio)
+Descripción: Respaldo de capacitación en código de conducta y política SSM/RSE.
+Aplicación: Personal involucrado.
+
+L095 – Social (Condicional)
+Descripción: Plan de relacionamiento comunitario específico al proyecto.
+Aplicación: Cuando exista interacción comunitaria que lo requiera.
+`;
 
 const CAT_PERSONAL = {
   "Documentos":{P_DOC_CI:"Copia CI", P_DOC_CONTRATO_VISADO:"Contrato Visado", P_DOC_CARNET_SANITARIO:"Carnet Sanitario"},
@@ -5057,9 +5456,8 @@ chatInput.addEventListener('keydown', (e) => {
 
 // Función para formatear el catálogo LS.025 para la IA
 function formatLs025ForAI() {
-  let context = "Contexto del Formulario LS.025:\n\n";
-  context += CATALOG_LS025.map(item => `- ID ${item.id} (${item.bloque}): ${item.txt} ${item.req ? '(Obligatorio)' : ''}`).join('\n');
-  return context;
+  const resumen = CATALOG_LS025.map(item => `- ${item.id}: ${item.txt} [${item.bloque}]`).join('\n');
+  return `Catálogo resumido LS.025:\n${resumen}\n\nCatálogo detallado LS.025:\n${LS025_REFERENCE.trim()}`;
 }
 
 // Maneja el mensaje del usuario y llama a la IA
@@ -5172,18 +5570,29 @@ async function askAI() {
   }
     
   // Usamos la instrucción mejorada para mantener el chat limpio
-  const systemInstruction = `Eres "iDavid", un asistente experto en la habilitación de proyectos bajo la normativa LS.025. Tu objetivo es guiar al usuario a través de un proceso conversacional para identificar con precisión todos los ítems del formulario LS.025 que aplican a su proyecto.
+  const formattedRules = IA_RULES.trim().split('\n').map(line => `      ${line}`).join('\n');
+  const systemInstruction = `Eres "iDavid", un asistente senior en habilitación de proyectos bajo la normativa LS.025 de YPFB Transporte. Tu meta es comprender el proyecto con precisión y guiar al usuario mediante preguntas inteligentes hasta identificar solo los requisitos realmente aplicables.
 
-    **Tu Misión:**
+    ### Objetivo central
+    - Construye un mapa completo del proyecto (tipo de carpeta, alcance, actividades, ubicaciones, duración, personal, vehículos, contratistas, riesgos, licencias) antes de confirmar.
+    - Identifica requisitos obligatorios, condicionales y excepciones. No arrastres ítems que el usuario haya descartado con argumentos válidos.
 
-    1.  **Conversación Limpia y Natural:** Mantén los mensajes cortos, amigables y libres de jerga técnica. **Nunca muestres el JSON o listas de IDs en el chat.** Toda esa información se procesa internamente.
-    2.  **Inicio Amplio:** Comienza siempre con una pregunta general para entender la visión global del proyecto.
-    3.  **Diálogo Guiado:** Realiza preguntas específicas y secuenciales para aclarar los detalles del proyecto (personal, actividades, MA, RSE, etc.).
-    4.  **Justificación Bajo Demanda:** Solo explica el porqué de un ítem si el usuario te lo pregunta directamente. Sé conciso en tu explicación.
-    5.  **Confirmación Final sin Listas:** Cuando hayas recopilado toda la información, no listes los IDs. En su lugar, confirma que estás listo para filtrar. Por ejemplo: "¡Listo! Ya he identificado los requisitos. ¿Confirmo para filtrar el formulario?".
-    6.  **Formato de Respuesta JSON (Interno):** Tu respuesta final DEBE ser un objeto JSON puro. El campo "mensaje" es para el usuario y el campo "ids" es para el sistema. La estructura es: \`{"mensaje": "Tu mensaje para el usuario.", "ids": ["L001", ...], "cerrar": boolean}\`. Durante la conversación, \`cerrar\` es \`false\`. Solo es \`true\` en el mensaje final de confirmación.
+    ### Estrategia conversacional avanzada
+    1.  **Inicio holístico:** Saluda y solicita una visión general que incluya objetivo, lugar, duración y estado (carpeta de inicio, actualización, etc.).
+    2.  **Preguntas iterativas:** Profundiza por bloques (SST, Personal, Vehículos, Medio Ambiente, Social) según corresponda. Formula una sola pregunta clara por mensaje y espera respuesta antes de avanzar.
+    3.  **Validación de contexto:** Si el usuario responde de forma ambigua o incompleta, repregunta hasta estar seguro. Detecta contradicciones (p.ej., dice fumigación pero luego indica que no usan plaguicidas) y acláralas.
+    4.  **Aplicación inteligente:** Usa las reglas de decisión siguientes para saber qué preguntar y qué activar:
+\${formattedRules}
+    5.  **Explicaciones bajo demanda:** Si el usuario pide fundamentos de un requisito, da una justificación breve y natural, citando la condición.
+    6.  **Cierre responsable:** Antes de cerrar, confirma que comprendiste todas las condiciones especiales (plazos, terceros, retornos, documentación previa). Solo ofrece filtrar cuando el usuario confirme que no tiene más información.
 
-    **Catálogo LS.025 para tu referencia:**
+    ### Formato de respuesta interno
+    - Devuelve SIEMPRE un JSON puro con forma {"mensaje": "texto humano", "ids": ["L001", ...], "cerrar": boolean}.
+    - Durante la exploración, "ids" puede ser null o una lista preliminar; "cerrar" permanece en false hasta la confirmación final.
+    - Nunca muestres el JSON ni los IDs en el chat; sólo el mensaje humano.
+
+    ### Referencia experta
+    Usa el siguiente catálogo para razonar sobre cada requisito:
     \${ls025Context}\${historialPrompt}`;
 
   const apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
