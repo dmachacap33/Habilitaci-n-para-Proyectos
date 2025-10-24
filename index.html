@@ -247,24 +247,42 @@ canvas{width:100%;height:300px;border-radius:8px}
 }
 
 .introjs-tooltip{
-  background:linear-gradient(135deg,var(--brand),#fef4e6);
-  color:#fff;
-  border-radius:6px;
-  box-shadow:0 10px 20px rgba(0,0,0,0.15);
+  background:linear-gradient(160deg,#f8fbff,#e7f1ff);
+  color:#0b2f66;
+  border-radius:16px;
+  box-shadow:0 20px 40px rgba(14,44,92,0.18);
+  padding:18px 22px;
+  font-size:16px;
+  line-height:1.5;
+  max-width:420px;
 }
 .introjs-tooltiptext{
   background:none;
+  color:inherit;
+}
+.introjs-tooltip-title{
+  font-size:18px;
+  color:#052c65;
+  margin-bottom:8px;
 }
 .introjs-button{
-  background:var(--brand);
+  background:linear-gradient(135deg,#0d64c4,#3b82f6);
   color:#fff;
   border:none;
-  border-radius:4px;
+  border-radius:999px;
+  padding:8px 16px;
+  font-weight:600;
+  box-shadow:0 6px 16px rgba(15,44,92,0.25);
 }
 .introjs-button:focus,.introjs-button:hover{
-  background:#0960bd;
+  background:linear-gradient(135deg,#0b58ad,#1d72d8);
 }
-.introjs-bullets li a.active{background:#fff}
+.introjs-bullets li a{
+  width:12px;
+  height:12px;
+  background:rgba(13,100,196,0.25);
+}
+.introjs-bullets li a.active{background:#0d64c4}
 @media (max-width:768px){
   .sidebar{position:static;width:100%;height:auto;flex-direction:row;border-right:none;border-bottom:1px solid var(--border);overflow-x:auto;}
   .sidebar .tab span{display:none;}
@@ -4781,27 +4799,67 @@ function buildTourSteps(){
   const $=s=>document.querySelector(s);
   const steps=[{intro:"Bienvenido al CRM de Habilitación. Este tour le mostrará las funciones principales."}];
   const dashTab=$(".tab[data-tab='dashboard']"), dashPanel=$("#panel-dashboard");
-  const cardsTab=$(".tab[data-tab='cards']"), search=$("#search");
+  const cardsTab=$(".tab[data-tab='cards']"), cardsPanel=$("#panel-cards"), search=$("#search");
   const ypfbTab=$(".tab[data-tab='ypfb']"), ypfbPanel=$("#panel-ypfb");
   const empPanel=$("#panel-empresa");
-  const lsPanel=$("#panel-ls025");
-  const perRow=$("#panel-personal .section .row");
-  const vehRow=$("#panel-vehiculos .section .row");
-  const resAccion=$("#rev-accion");
+  const lsTab=$(".tab[data-tab='ls025']"), lsPanel=$("#panel-ls025"), rolSelect=$("#ls-rol"), lsContainer=$("#ls025-container");
+  const perTab=$(".tab[data-tab='personal']"), perPanel=$("#panel-personal"), perForm=perPanel?.querySelector(".section"), perTable=$("#tabla-personal");
+  const vehTab=$(".tab[data-tab='vehiculos']"), vehPanel=$("#panel-vehiculos"), vehForm=vehPanel?.querySelector(".section"), vehTable=$("#tabla-vehiculos");
+  const resTab=$(".tab[data-tab='resumen']"), resPanel=$("#panel-resumen"), resAccion=$("#rev-accion"), registrarBtn=resPanel?.querySelector("button.btn:not(.secondary)");
   const userTab=$(".tab[data-tab='usuarios']");
+  const pdfBtn=Array.from(document.querySelectorAll("#cards .btn.secondary.small")).find(btn=>btn.textContent.trim()==="PDF");
+  const editBtn=Array.from(document.querySelectorAll("#cards .btn.small")).find(btn=>btn.textContent.trim()==="Editar"||btn.textContent.trim()==="Abrir");
 
-  if(dashTab) steps.push({element:dashTab,intro:"Ingresa al Dashboard para ver métricas generales."});
-  if(dashPanel) steps.push({element:dashPanel,intro:"El Dashboard resume el estado de tus proyectos."});
-  if(cardsTab) steps.push({element:cardsTab,intro:"Desde Cards Empresa puedes gestionar todas las carpetas."});
-  if(search) steps.push({element:search,intro:"Busca y filtra empresas o proyectos."});
-  if(ypfbTab) steps.push({element:ypfbTab,intro:"La sección YPFB muestra asignaciones pendientes y revisadas."});
-  if(ypfbPanel) steps.push({element:ypfbPanel,intro:"Aquí se listan las carpetas asignadas a YPFB."});
-  if(empPanel) steps.push({element:empPanel,intro:"En Empresa edita datos y crea nuevos proyectos."});
-  if(lsPanel) steps.push({element:lsPanel,intro:"En LS.025 selecciona S/N/NA y escribe comentarios por requisito."});
-  if(perRow) steps.push({element:perRow,intro:"Añade Personal indicando nombre, cargo e ID."});
-  if(vehRow) steps.push({element:vehRow,intro:"Registra Vehículos con su placa y características."});
-  if(resAccion) steps.push({element:resAccion,intro:"En Resumen registra acciones y genera reportes."});
-  if(USUARIO.admin && userTab) steps.push({element:userTab,intro:"Los administradores gestionan usuarios y roles aquí."});
+  const esRevisor=!USUARIO.admin && ES_RESPONSABLE;
+  const rolesAsignados=Array.from(USER_ROLES||[]);
+  const rolTexto=rolesAsignados.length?rolesAsignados.join(', '):'tu rol asignado';
+  const isVisible=el=>{
+    if(!el) return false;
+    const style=window.getComputedStyle(el);
+    return style.display!=='none' && style.visibility!=='hidden';
+  };
+
+  if(esRevisor){
+    if(cardsTab) steps.push({element:cardsTab,intro:"Ingresa a Cards Empresa para ubicar la carpeta que te corresponde revisar."});
+    if(cardsPanel && editBtn) steps.push({element:editBtn,intro:"Usa el botón Editar para abrir la carpeta seleccionada y cargar toda la información del proyecto."});
+    else if(cardsPanel) steps.push({element:cardsPanel,intro:"Desde Cards Empresa selecciona la empresa y usa Editar para abrir la carpeta a revisar."});
+    if(lsTab) steps.push({element:lsTab,intro:"Luego ingresa a la pestaña LS.025 para evaluar los requisitos de la carpeta."});
+    if(rolSelect) steps.push({element:rolSelect,intro:`Utiliza el filtro "Tipo de revisor" para trabajar solo con los bloques asignados a ${rolTexto}.`});
+    if(lsContainer) steps.push({element:lsContainer,intro:"Recorre cada bloque, marca S/N/NA y anota observaciones para completar la evaluación."});
+    if(isVisible(perTab)){
+      steps.push({element:perTab,intro:"Si la carpeta incluye personal, ingresa a la pestaña Personal para registrar sus datos."});
+      if(perForm) steps.push({element:perForm,intro:"Completa nombre, cargo y PersonaID y presiona Agregar para habilitar a cada trabajador."});
+      const perEditBtn=perTable?Array.from(perTable.querySelectorAll(".btn.small")).find(btn=>btn.textContent.trim()==="Editar"):null;
+      if(perEditBtn) steps.push({element:perEditBtn,intro:"Cuando debas actualizar información del personal, selecciona Editar desde la tabla."});
+    }
+    if(isVisible(vehTab)){
+      steps.push({element:vehTab,intro:"Ingresa a la pestaña Vehículos para registrar las unidades que trabajarán en el proyecto."});
+      if(vehForm) steps.push({element:vehForm,intro:"Escribe placa, tipo y código del vehículo y presiona Agregar para guardarlo."});
+      const vehEditBtn=vehTable?Array.from(vehTable.querySelectorAll(".btn.small")).find(btn=>btn.textContent.trim()==="Editar"):null;
+      if(vehEditBtn) steps.push({element:vehEditBtn,intro:"Usa Editar cuando necesites modificar la información de un vehículo registrado."});
+    }
+    if(resTab) steps.push({element:resTab,intro:"Finaliza en la pestaña Resumen para validar el estado general de la carpeta."});
+    if(resAccion) steps.push({element:resAccion,intro:"Elige la acción (Revisión, Recibido o Devolución) que corresponde a tu evaluación."});
+    if(registrarBtn) steps.push({element:registrarBtn,intro:"Presiona Registrar para guardar tu revisión y actualizar el historial."});
+    if(pdfBtn) steps.push({element:pdfBtn,intro:"Para compartir un informe, vuelve a Cards Empresa, ubica la carpeta y genera el archivo con el botón PDF."});
+  }else{
+    if(dashTab) steps.push({element:dashTab,intro:"Ingresa al Dashboard para revisar el estado general de todas las carpetas."});
+    if(dashPanel) steps.push({element:dashPanel,intro:"El Dashboard resume métricas clave y gráficas de avance."});
+    if(cardsTab) steps.push({element:cardsTab,intro:"Desde Cards Empresa gestionas cada carpeta y accedes rápidamente a sus acciones."});
+    if(cardsPanel) steps.push({element:cardsPanel,intro:"Busca una empresa, revisa los estados y usa Editar o PDF según lo que necesites."});
+    if(search) steps.push({element:search,intro:"Filtra empresas o proyectos por nombre, tipo o estado."});
+    if(ypfbTab) steps.push({element:ypfbTab,intro:"Revisa la pestaña YPFB para monitorear asignaciones pendientes y revisadas."});
+    if(ypfbPanel) steps.push({element:ypfbPanel,intro:"Aquí encontrarás el detalle de las carpetas asignadas a YPFB Transporte."});
+    if(empPanel) steps.push({element:empPanel,intro:"En Empresa administra datos básicos y proyectos registrados para cada cliente."});
+    if(lsPanel) steps.push({element:lsPanel,intro:"En LS.025 puedes calificar requisitos, filtrar por rol y revisar observaciones."});
+    if(isVisible(perTab) && perPanel) steps.push({element:perPanel,intro:"La pestaña Personal permite registrar y actualizar la habilitación del personal."});
+    if(isVisible(vehTab) && vehPanel) steps.push({element:vehPanel,intro:"Desde Vehículos controlas las unidades registradas para el proyecto."});
+    if(resPanel) steps.push({element:resPanel,intro:"Utiliza Resumen para generar snapshots, registrar acciones y descargar reportes."});
+    if(resAccion) steps.push({element:resAccion,intro:"Selecciona la acción adecuada antes de guardar los cambios."});
+    if(registrarBtn) steps.push({element:registrarBtn,intro:"Presiona Registrar para dejar constancia de la gestión realizada."});
+    if(pdfBtn) steps.push({element:pdfBtn,intro:"Genera un PDF del proyecto desde Cards Empresa para compartirlo o archivarlo."});
+    if(USUARIO.admin && userTab) steps.push({element:userTab,intro:"Los administradores gestionan usuarios y roles desde esta pestaña."});
+  }
   return steps;
 }
 
