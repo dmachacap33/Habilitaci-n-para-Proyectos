@@ -72,6 +72,8 @@ textarea{min-height:80px;resize:vertical}
 .badge.err{background:rgba(239,68,68,.15);color:var(--err)}
 .badge.muted{background:rgba(100,116,139,.2);color:#475569}
 .table tr.row-hidden{opacity:.55}
+.table tr.ls-neg td{background:rgba(185,28,28,0.12);color:#7f1d1d;font-weight:600}
+.table tr.ls-neg select,.table tr.ls-neg input{border-color:var(--err);background:rgba(185,28,28,0.15);color:#7f1d1d}
 .aprob-banner{padding:6px;margin-top:10px;text-align:center;font-weight:bold;border:2px solid}
 .aprob-banner.ok{border-color:var(--ok);color:var(--ok)}
 .aprob-banner.err{border-color:var(--err);color:var(--err)}
@@ -528,6 +530,11 @@ body.mobile-viewport header label,body.mobile-viewport header .inp,body.mobile-v
         <option value="SEG">Solo Seguridad</option>
         <option value="MA">Solo Medio Ambiente</option>
         <option value="RSE">Solo RSE</option>
+      </select>
+      <select id="ls-n-filter" class="inp" style="max-width:220px">
+        <option value="">Ver todos</option>
+        <option value="N_ALL">Solo “N” (todos los bloques)</option>
+        <option value="N_SEG">Solo “N” (Seguridad)</option>
       </select>
     </div>
     <div class="kpi" style="margin-top:8px">
@@ -4293,6 +4300,7 @@ function buildLs025(){
   const clave = $("#ls-empresaSel").value; const pid = $("#ls-proyectoSel").value;
   const pr = (DBCACHE[clave]?.proyectos||{})[pid] || null;
   const role = $("#ls-rol").value;
+  const nFilter = $("#ls-n-filter")?.value || "";
   const dis = READONLY?"disabled":"";
   const vals = {};
   (pr?.ls025?.respuestas||[]).forEach(r=>{vals[r.reqId]=r;});
@@ -4312,34 +4320,57 @@ function buildLs025(){
   }
   // --- FIN DE LÓGICA DE FILTRADO ---
 
-  const grupos = [...new Set(catalogoAMostrar.filter(x=>lsRoleMatches(x.bloque, role)).map(i=>i.bloque))];
-  grupos.forEach(g=>{
-    const wrap=document.createElement("details"); wrap.open=true; wrap.innerHTML = `<summary>${g}</summary>`;
-    const tbl = document.createElement("table"); tbl.className="table"; tbl.innerHTML = `<thead><tr><th style="width:90px">ID</th><th>Requisito</th><th style="width:140px">S/N/NA</th><th>Comentario</th></tr></thead>`;
-    const tbody = document.createElement("tbody");
-    catalogoAMostrar.filter(x=>x.bloque===g).forEach(it=>{ // Usar catalogoAMostrar
-      const r = vals[it.id]||{};
-      const tr=document.createElement("tr");
-      tr.innerHTML = `
-        <td>${it.id}${it.req?` <span class="badge warn">Oblig.</span>`:""}</td>
-        <td>${it.txt}</td>
-        <td>
-          <select class="ls-val" data-reqid="${it.id}" ${dis}>
-            <option value="">—</option>
-            <option value="S" ${r.valor==="S"?"selected":""}>S</option>
-            <option value="N" ${r.valor==="N"?"selected":""}>N</option>
-            <option value="NA" ${r.valor==="NA"?"selected":""}>NA</option>
-          </select>
-        </td>
-        <td><input class="ls-com" data-reqid="${it.id}" type="text" placeholder="Comentario" value="${r.comentario||""}" ${dis}/></td>
-      `;
-      tbody.appendChild(tr);
-    });
-    tbl.appendChild(tbody); wrap.appendChild(tbl); cont.appendChild(wrap);
+  $("#k-ls-total").textContent = catalogoAMostrar.length;
+
+  const catalogoFiltrado = catalogoAMostrar.filter(it=>{
+    if(!lsRoleMatches(it.bloque, role)) return false;
+    const currentVal = vals[it.id]?.valor || "";
+    if(nFilter==="N_ALL") return currentVal==="N";
+    if(nFilter==="N_SEG") return currentVal==="N" && lsRoleMatches(it.bloque, "SEG");
+    return true;
   });
-  cont.onchange = e=>{
-    if(e.target.classList.contains("ls-val") || e.target.classList.contains("ls-com")) guardarLS025();
-  };
+
+  if(!catalogoFiltrado.length){
+    const empty=document.createElement("div");
+    empty.className="note";
+    empty.textContent="Sin ítems que coincidan con el filtro seleccionado.";
+    cont.appendChild(empty);
+    cont.onchange = null;
+  }else{
+    const grupos = [...new Set(catalogoFiltrado.map(i=>i.bloque))];
+    grupos.forEach(g=>{
+      const wrap=document.createElement("details"); wrap.open=true; wrap.innerHTML = `<summary>${g}</summary>`;
+      const tbl = document.createElement("table"); tbl.className="table"; tbl.innerHTML = `<thead><tr><th style="width:90px">ID</th><th>Requisito</th><th style="width:140px">S/N/NA</th><th>Comentario</th></tr></thead>`;
+      const tbody = document.createElement("tbody");
+      catalogoFiltrado.filter(x=>x.bloque===g).forEach(it=>{
+        const r = vals[it.id]||{};
+        const tr=document.createElement("tr");
+        tr.innerHTML = `
+          <td>${it.id}${it.req?` <span class="badge warn">Oblig.</span>`:""}</td>
+          <td>${it.txt}</td>
+          <td>
+            <select class="ls-val" data-reqid="${it.id}" ${dis}>
+              <option value="">—</option>
+              <option value="S" ${r.valor==="S"?"selected":""}>S</option>
+              <option value="N" ${r.valor==="N"?"selected":""}>N</option>
+              <option value="NA" ${r.valor==="NA"?"selected":""}>NA</option>
+            </select>
+          </td>
+          <td><input class="ls-com" data-reqid="${it.id}" type="text" placeholder="Comentario" value="${r.comentario||""}" ${dis}/></td>
+        `;
+        if(r.valor==="N") tr.classList.add("ls-neg");
+        tbody.appendChild(tr);
+      });
+      tbl.appendChild(tbody); wrap.appendChild(tbl); cont.appendChild(wrap);
+    });
+    cont.onchange = e=>{
+      if(e.target.classList.contains("ls-val")){
+        const tr=e.target.closest("tr");
+        if(tr) tr.classList.toggle("ls-neg", e.target.value==="N");
+      }
+      if(e.target.classList.contains("ls-val") || e.target.classList.contains("ls-com")) guardarLS025();
+    };
+  }
   refrescarKpiLS();
   $("#ls-conflict").style.display = (pr?.conflicts?.length) ? "block" : "none";
   if(pr?.conflicts?.length){
@@ -5899,6 +5930,7 @@ function init(){
         });
     }
     $("#ls-rol").addEventListener("change", buildLs025);
+    $("#ls-n-filter").addEventListener("change", buildLs025);
 }
 init();
 if("serviceWorker" in navigator){navigator.serviceWorker.register("service-worker.js");}
