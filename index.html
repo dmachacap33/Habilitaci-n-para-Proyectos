@@ -105,7 +105,11 @@ textarea{min-height:80px;resize:vertical}
 .calendar-info{display:flex;flex-direction:column;gap:6px}
 .calendar-title{font-weight:600;font-size:15px;color:#0b2f66}
 .calendar-meta{font-size:13px;color:#475569}
-.calendar-timeline{position:relative;height:54px;background:linear-gradient(180deg,rgba(14,116,144,0.05),rgba(15,23,42,0));border-radius:14px;padding:6px 0;overflow:hidden}
+.calendar-timeline{position:relative;height:54px;background:linear-gradient(180deg,rgba(14,116,144,0.05),rgba(15,23,42,0));border-radius:14px;padding:6px 0;overflow:hidden;cursor:grab}
+.calendar-timeline.dragging{cursor:grabbing}
+.calendar-grid.dragging{user-select:none}
+.calendar-header{cursor:grab}
+.calendar-header.dragging{cursor:grabbing}
 .calendar-day-grid{position:absolute;top:6px;bottom:6px;left:6px;right:6px;display:grid;gap:4px;grid-template-columns:repeat(var(--calendar-cols,7),minmax(80px,1fr))}
 .calendar-bar-layer{position:absolute;top:6px;bottom:6px;left:6px;right:6px}
 .calendar-day-slot{border-radius:10px;background:rgba(148,163,184,0.18)}
@@ -533,10 +537,9 @@ body.mobile-viewport header label,body.mobile-viewport header .inp,body.mobile-v
       </select>
       <select id="ls-n-filter" class="inp" style="max-width:240px">
         <option value="">Ver todos</option>
-        <option value="N_ALL">Solo “N” (todos los bloques)</option>
-        <option value="N_SEG">Solo “N” (Seguridad)</option>
-        <option value="N_MA">Solo “N” (Medio Ambiente)</option>
-        <option value="N_RSE">Solo “N” (RSE)</option>
+        <option value="ONLY_N">Solo “N”</option>
+        <option value="ONLY_S">Solo “S”</option>
+        <option value="ONLY_NA">Solo “N/A”</option>
       </select>
     </div>
     <div class="kpi" style="margin-top:8px">
@@ -1649,6 +1652,8 @@ const BANNER_OK_STATES = new Set(["APROBADO","NO APLICA","SIN PERSONAL","SIN VEH
 const DAY_MS = 24*60*60*1000;
 const CALENDAR_WINDOW_DAYS = 10;
 const CALENDAR_REMINDER_HOUR = 8;
+let calendarOffsetDays = 0;
+let calendarDragState = null;
 let calendarReminderTimer = null;
 function idbOpen(){return new Promise((res,rej)=>{const req = indexedDB.open(DB_NAME,1);req.onupgradeneeded=e=>e.target.result.createObjectStore(STORE);req.onsuccess=e=>res(e.target.result);req.onerror=e=>rej(e.target.error);});}
 async function idbSet(k,v){const db=await idbOpen();return new Promise((res,rej)=>{const tx=db.transaction(STORE,"readwrite");tx.objectStore(STORE).put(v,k);tx.oncomplete=()=>res();tx.onerror=e=>rej(e.target.error);});}
@@ -3573,7 +3578,7 @@ function renderCalendario(){
     return true;
   });
   const now=new Date();
-  const windowStart=new Date(now.getFullYear(), now.getMonth(), now.getDate()-1);
+  const windowStart=new Date(now.getFullYear(), now.getMonth(), now.getDate()-1 + calendarOffsetDays);
   windowStart.setHours(0,0,0,0);
   const windowEnd=new Date(windowStart.getTime());
   windowEnd.setDate(windowEnd.getDate()+CALENDAR_WINDOW_DAYS);
@@ -3603,13 +3608,24 @@ function renderCalendario(){
       summary.textContent=texto;
     }
   }
+  let ordered=filtrados;
+  if(estadoFiltro){
+    const upcoming=[];
+    const others=[];
+    filtrados.forEach(p=>{
+      if(p.due>=now) upcoming.push(p); else others.push(p);
+    });
+    upcoming.sort((a,b)=>a.due-b.due);
+    others.sort((a,b)=>a.due-b.due);
+    ordered=[...upcoming,...others];
+  }
   cont.innerHTML="";
-  if(!filtrados.length){
+  if(!ordered.length){
     cont.innerHTML="<div class='calendar-empty'>No hay proyectos que coincidan con el filtro actual.</div>";
     updateCalendarReminder(proyectos);
     return;
   }
-  filtrados.forEach(proj=>{
+  ordered.forEach(proj=>{
     const row=document.createElement('div');
     row.className='calendar-row';
     const info=document.createElement('div');
@@ -3669,8 +3685,63 @@ function renderCalendario(){
     row.appendChild(timeline);
     cont.appendChild(row);
   });
+  initCalendarDrag();
   updateCalendarReminder(proyectos);
 }
+
+function initCalendarDrag(){
+  const grid=$(".calendar-grid");
+  if(!grid || grid.dataset.dragBound) return;
+  grid.dataset.dragBound="1";
+  const startHandler=e=>{
+    const target=e.target.closest('.calendar-timeline, .calendar-header');
+    if(!target) return;
+    const ref=target.classList.contains('calendar-timeline')?target.querySelector('.calendar-day-grid'):$("#calendario-dias");
+    const rect=ref?.getBoundingClientRect();
+    if(!rect || !rect.width) return;
+    const point=e.touches?e.touches[0]:e;
+    calendarDragState={
+      startX:point.clientX,
+      startOffset:calendarOffsetDays,
+      pxPerDay:rect.width/CALENDAR_WINDOW_DAYS,
+      activeElement:target
+    };
+    target.classList.add('dragging');
+    grid.classList.add('dragging');
+    e.preventDefault();
+  };
+  grid.addEventListener('mousedown', startHandler);
+  grid.addEventListener('touchstart', startHandler, {passive:false});
+}
+
+function handleCalendarDragMove(e){
+  if(!calendarDragState) return;
+  const point=e.touches?e.touches[0]:e;
+  const deltaPx=point.clientX-calendarDragState.startX;
+  if(!calendarDragState.hasMoved && Math.abs(deltaPx)<4) return;
+  calendarDragState.hasMoved=true;
+  const deltaDays=Math.round((deltaPx/calendarDragState.pxPerDay)*-1);
+  const nextOffset=calendarDragState.startOffset+deltaDays;
+  if(nextOffset!==calendarOffsetDays){
+    calendarOffsetDays=Math.max(-180, Math.min(180, nextOffset));
+    renderCalendario();
+  }
+  e.preventDefault();
+}
+
+function handleCalendarDragEnd(){
+  if(!calendarDragState) return;
+  calendarDragState.activeElement?.classList.remove('dragging');
+  const grid=$(".calendar-grid");
+  if(grid) grid.classList.remove('dragging');
+  calendarDragState=null;
+}
+
+window.addEventListener('mousemove', handleCalendarDragMove);
+window.addEventListener('touchmove', handleCalendarDragMove, {passive:false});
+window.addEventListener('mouseup', handleCalendarDragEnd);
+window.addEventListener('touchend', handleCalendarDragEnd);
+window.addEventListener('touchcancel', handleCalendarDragEnd);
 
 function renderYPFB(){
   const pend=[], rev=[];
@@ -4327,10 +4398,9 @@ function buildLs025(){
   const catalogoFiltrado = catalogoAMostrar.filter(it=>{
     if(!lsRoleMatches(it.bloque, role)) return false;
     const currentVal = vals[it.id]?.valor || "";
-    if(nFilter==="N_ALL") return currentVal==="N";
-    if(nFilter==="N_SEG") return currentVal==="N" && lsRoleMatches(it.bloque, "SEG");
-    if(nFilter==="N_MA") return currentVal==="N" && lsRoleMatches(it.bloque, "MA");
-    if(nFilter==="N_RSE") return currentVal==="N" && lsRoleMatches(it.bloque, "RSE");
+    if(nFilter==="ONLY_N") return currentVal==="N";
+    if(nFilter==="ONLY_S") return currentVal==="S";
+    if(nFilter==="ONLY_NA") return currentVal==="NA";
     return true;
   });
 
@@ -5426,12 +5496,24 @@ const sendBtn = document.getElementById('chat-send-btn');
 const chatInput = document.getElementById('chat-input');
 const chatMessages = document.getElementById('chat-messages');
 
+function isPwaMode(){
+  if(typeof window === 'undefined') return false;
+  const mediaMatch = mode => {
+    if(!window.matchMedia) return false;
+    const query = window.matchMedia(`(display-mode: ${mode})`);
+    return !!query && query.matches;
+  };
+  return Boolean((typeof navigator !== 'undefined' && navigator.standalone) || mediaMatch('standalone') || mediaMatch('fullscreen'));
+}
+
 function setChatVisibility(show){
-  if(chatBtn) chatBtn.style.display = show ? 'flex' : 'none';
-  if(!show && chatContainer) chatContainer.classList.remove('visible');
+  const allowChat = show && !isPwaMode();
+  if(chatBtn) chatBtn.style.display = allowChat ? 'flex' : 'none';
+  if(!allowChat && chatContainer) chatContainer.classList.remove('visible');
 }
 
 async function checkAiAccess(){
+  if(isPwaMode()){ setChatVisibility(false); return; }
   if(!USUARIO || !USUARIO.correo){ setChatVisibility(false); return; }
   if(USUARIO.admin){ setChatVisibility(true); return; }
   if(database){
@@ -5488,6 +5570,22 @@ chatInput.addEventListener('keydown', (e) => {
     handleUserMessage();
   }
 });
+
+if(window.matchMedia){
+  const standaloneQuery = window.matchMedia('(display-mode: standalone)');
+  const fullscreenQuery = window.matchMedia('(display-mode: fullscreen)');
+  const handleDisplayModeChange = evt => {
+    if(evt.matches){
+      setChatVisibility(false);
+    } else {
+      checkAiAccess();
+    }
+  };
+  if(standaloneQuery.addEventListener) standaloneQuery.addEventListener('change', handleDisplayModeChange);
+  else if(standaloneQuery.addListener) standaloneQuery.addListener(handleDisplayModeChange);
+  if(fullscreenQuery.addEventListener) fullscreenQuery.addEventListener('change', handleDisplayModeChange);
+  else if(fullscreenQuery.addListener) fullscreenQuery.addListener(handleDisplayModeChange);
+}
 
 // Función para formatear el catálogo LS.025 para la IA
 function formatLs025ForAI() {
