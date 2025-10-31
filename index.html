@@ -5496,12 +5496,24 @@ const sendBtn = document.getElementById('chat-send-btn');
 const chatInput = document.getElementById('chat-input');
 const chatMessages = document.getElementById('chat-messages');
 
+function isPwaMode(){
+  if(typeof window === 'undefined') return false;
+  const mediaMatch = mode => {
+    if(!window.matchMedia) return false;
+    const query = window.matchMedia(`(display-mode: ${mode})`);
+    return !!query && query.matches;
+  };
+  return Boolean((typeof navigator !== 'undefined' && navigator.standalone) || mediaMatch('standalone') || mediaMatch('fullscreen'));
+}
+
 function setChatVisibility(show){
-  if(chatBtn) chatBtn.style.display = show ? 'flex' : 'none';
-  if(!show && chatContainer) chatContainer.classList.remove('visible');
+  const allowChat = show && !isPwaMode();
+  if(chatBtn) chatBtn.style.display = allowChat ? 'flex' : 'none';
+  if(!allowChat && chatContainer) chatContainer.classList.remove('visible');
 }
 
 async function checkAiAccess(){
+  if(isPwaMode()){ setChatVisibility(false); return; }
   if(!USUARIO || !USUARIO.correo){ setChatVisibility(false); return; }
   if(USUARIO.admin){ setChatVisibility(true); return; }
   if(database){
@@ -5558,6 +5570,22 @@ chatInput.addEventListener('keydown', (e) => {
     handleUserMessage();
   }
 });
+
+if(window.matchMedia){
+  const standaloneQuery = window.matchMedia('(display-mode: standalone)');
+  const fullscreenQuery = window.matchMedia('(display-mode: fullscreen)');
+  const handleDisplayModeChange = evt => {
+    if(evt.matches){
+      setChatVisibility(false);
+    } else {
+      checkAiAccess();
+    }
+  };
+  if(standaloneQuery.addEventListener) standaloneQuery.addEventListener('change', handleDisplayModeChange);
+  else if(standaloneQuery.addListener) standaloneQuery.addListener(handleDisplayModeChange);
+  if(fullscreenQuery.addEventListener) fullscreenQuery.addEventListener('change', handleDisplayModeChange);
+  else if(fullscreenQuery.addListener) fullscreenQuery.addListener(handleDisplayModeChange);
+}
 
 // Función para formatear el catálogo LS.025 para la IA
 function formatLs025ForAI() {
