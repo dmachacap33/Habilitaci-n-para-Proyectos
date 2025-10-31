@@ -533,10 +533,9 @@ body.mobile-viewport header label,body.mobile-viewport header .inp,body.mobile-v
       </select>
       <select id="ls-n-filter" class="inp" style="max-width:240px">
         <option value="">Ver todos</option>
-        <option value="N_ALL">Solo “N” (todos los bloques)</option>
-        <option value="N_SEG">Solo “N” (Seguridad)</option>
-        <option value="N_MA">Solo “N” (Medio Ambiente)</option>
-        <option value="N_RSE">Solo “N” (RSE)</option>
+        <option value="ONLY_N">Solo “N”</option>
+        <option value="ONLY_S">Solo “S”</option>
+        <option value="ONLY_NA">Solo “N/A”</option>
       </select>
     </div>
     <div class="kpi" style="margin-top:8px">
@@ -4327,10 +4326,9 @@ function buildLs025(){
   const catalogoFiltrado = catalogoAMostrar.filter(it=>{
     if(!lsRoleMatches(it.bloque, role)) return false;
     const currentVal = vals[it.id]?.valor || "";
-    if(nFilter==="N_ALL") return currentVal==="N";
-    if(nFilter==="N_SEG") return currentVal==="N" && lsRoleMatches(it.bloque, "SEG");
-    if(nFilter==="N_MA") return currentVal==="N" && lsRoleMatches(it.bloque, "MA");
-    if(nFilter==="N_RSE") return currentVal==="N" && lsRoleMatches(it.bloque, "RSE");
+    if(nFilter==="ONLY_N") return currentVal==="N";
+    if(nFilter==="ONLY_S") return currentVal==="S";
+    if(nFilter==="ONLY_NA") return currentVal==="NA";
     return true;
   });
 
