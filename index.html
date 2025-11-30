@@ -1639,6 +1639,10 @@ function findPersonaByCorreo(correo){
 function normalizeEmail(email){
   return (email || "").trim().toLowerCase();
 }
+
+function emailPath(email){
+  return normalizeEmail(email).replace(/[.#$/\\[\\]@]/g, '_');
+}
 </script>
 <script id="db-json" type="application/json"></script>
 
@@ -1939,6 +1943,14 @@ let pendingNombreLogin = "";
 let firebaseRootRef = null;
 let firebaseValueListener = null;
 let firebaseErrorShown = false;
+
+function enforceAdminWrite(action="realizar esta operación"){
+  if(USUARIO?.admin){
+    return true;
+  }
+  alert(`Autorización insuficiente: solo administradores pueden ${action}.`);
+  return false;
+}
 if (!conversation) {
   conversation = [{
     role: 'model',
@@ -2101,6 +2113,10 @@ function persistDB(){
   }
 
   if (database) {
+    if(!enforceAdminWrite('guardar datos en Firebase')){
+      persistLocalCache();
+      return;
+    }
     database.ref().update(payload)
       .then(()=>{
         REMOTE_SNAPSHOT = cloneData(sanitizedCurrent);
@@ -2121,6 +2137,7 @@ function persistPersonal(){
   if(!clave || !pid){ persistDB(); return; }
   const pr=ensureProyecto(clave,pid);
   if(database){
+    if(!enforceAdminWrite('guardar personal en Firebase')){ persistLocalCache(); return; }
     database.ref(`${clave}/proyectos/${pid}/personal`).set(pr.personal)
       .catch(error=>{
         console.error("Error al guardar datos en Firebase:", error);
@@ -2138,6 +2155,7 @@ function persistVehiculos(){
   if(!clave || !pid){ persistDB(); return; }
   const pr=ensureProyecto(clave,pid);
   if(database){
+    if(!enforceAdminWrite('guardar vehículos en Firebase')){ persistLocalCache(); return; }
     database.ref(`${clave}/proyectos/${pid}/vehiculos`).set(pr.vehiculos)
       .catch(error=>{
         console.error("Error al guardar datos en Firebase:", error);
@@ -2189,7 +2207,7 @@ function cargarHistorialDesdeFirebase(){
 }
 
 function guardarHistorialRegistro(entry){
-  if(!database) return;
+  if(!database || !enforceAdminWrite('registrar historial en Firebase')) return;
   database.ref('historial').push(entry).catch(err=>{
     console.error('Error al guardar historial en Firebase:', err);
   });
@@ -2415,7 +2433,7 @@ function confirmLogin() {
               payload.telefono = persona.telefono;
             }
 
-            if(database){
+            if(database && enforceAdminWrite('crear usuarios en Firebase')){
               const userKey = payload.codigo || userCredential.user.uid;
               database.ref('usuarios/' + userKey).set(payload);
             }
@@ -2485,6 +2503,7 @@ function ensureUsuarioEnRegistro(user, nombrePreferido = "", codigoPreferido = "
   renderUsuarios();
 
   if(database){
+    if(!enforceAdminWrite('sincronizar usuarios en Firebase')) return Promise.resolve();
     updates[`usuarios/${claveObjetivo}`] = registro;
     return database.ref().update(updates).catch(err=>{
       console.error("Error al sincronizar usuario en Firebase:", err);
@@ -2504,7 +2523,7 @@ async function handleSuccessfulLogin(user, remember, nombreManual = "") {
   const registroExistente = Object.values(USERS||{}).find(u=>normalizeEmail(u.correo)===correoLower);
   const codigoPrevio = USUARIO?.codigo || "";
   const codigoFinal = persona?.codigo || codigoPrevio || registroExistente?.codigo || "";
-  const esAdmin = correoLower && ADMIN_EMAILS.has(correoLower);
+  const esAdmin = await resolveAdminStatus(user);
 
   USUARIO = {
     uid: user.uid,
@@ -2689,6 +2708,20 @@ function saveAdminEmailsLocal(){
   }
 }
 
+async function resolveAdminStatus(user){
+  const correoLower = normalizeEmail(user?.email || "");
+  let hasClaim = false;
+  if(user?.getIdTokenResult){
+    try{
+      const token = await user.getIdTokenResult();
+      hasClaim = !!token?.claims?.admin;
+    }catch(err){
+      console.error('No se pudo obtener los claims del usuario:', err);
+    }
+  }
+  return hasClaim || (correoLower && ADMIN_EMAILS.has(correoLower));
+}
+
 function refreshCurrentAdminStatus(){
   const correoLower = normalizeEmail(USUARIO?.correo || "");
   const esAdmin = correoLower && ADMIN_EMAILS.has(correoLower);
@@ -2716,7 +2749,11 @@ async function loadAdminEmails(){
       if(Array.isArray(data)){
         emails=data;
       }else if(data && typeof data==='object'){
-        emails = Object.values(data);
+        if(Array.isArray(data.list)){
+          emails = data.list;
+        }else{
+          emails = Object.values(data).filter(v=>typeof v==='string');
+        }
       }
       if(emails.length){
         ADMIN_EMAILS = new Set(emails.map(normalizeEmail).filter(Boolean));
@@ -2735,11 +2772,15 @@ async function loadAdminEmails(){
 }
 
 async function persistAdminEmails(){
+  if(!enforceAdminWrite('modificar la lista de administradores')) return;
   saveAdminEmailsLocal();
   renderAdminEmails();
   if(database){
     try{
-      await database.ref('config/admins').set(Array.from(ADMIN_EMAILS));
+      const emails = Array.from(ADMIN_EMAILS).map(normalizeEmail).filter(Boolean);
+      const index = {};
+      emails.forEach(email=>{ index[emailPath(email)] = true; });
+      await database.ref('config/admins').set({ list: emails, index });
     }catch(err){
       console.error('Error al guardar admins en Firebase:', err);
       alert('No se pudo guardar la lista de administradores.');
@@ -4641,6 +4682,7 @@ function eliminarEmpresa(){
   delete DBCACHE[clave];
 
   if(database){
+    if(!enforceAdminWrite('eliminar empresas en Firebase')){ persistDB(); return; }
     database.ref(clave).remove()
       .catch(error=>{
         console.error("Error al eliminar empresa en Firebase:", error);
@@ -5873,7 +5915,7 @@ async function ensureGeminiApiKey(){
   if(key){
     GEMINI_API_KEY = key.trim();
     localStorage.setItem(`geminiKey_${codigo}`, GEMINI_API_KEY);
-    if(database){
+    if(database && enforceAdminWrite('guardar la API key en Firebase')){
       database.ref('geminiKeys/'+codigo).set(GEMINI_API_KEY).catch(err=>{
         console.error('Error al guardar API key en Firebase:', err);
       });
@@ -6174,7 +6216,7 @@ async function saveConfig(){
   if(apiKey){
     GEMINI_API_KEY = apiKey;
     localStorage.setItem(`geminiKey_${codigo}`, apiKey);
-    if(database) database.ref('geminiKeys/'+codigo).set(apiKey);
+    if(database && enforceAdminWrite('guardar la API key en Firebase')) database.ref('geminiKeys/'+codigo).set(apiKey);
   }
   if(script){
     SHEET_WEBAPP_URL = script;
@@ -6201,11 +6243,11 @@ async function changePassword(){
 }
 
 function grantAi(email){
-  if(!database) return;
+  if(!database || !enforceAdminWrite('habilitar el asistente de IA')) return;
   database.ref('aiUsers/'+emailPath(email)).set(true);
 }
 function revokeAi(email){
-  if(!database) return;
+  if(!database || !enforceAdminWrite('revocar el asistente de IA')) return;
   database.ref('aiUsers/'+emailPath(email)).remove();
 }
 
@@ -6313,6 +6355,7 @@ function init(){
     toggleResponsableUI(false);
     setChatVisibility(false);
     renderAdminEmails();
+    loadAdminEmails();
 
     if(auth){
         auth.onAuthStateChanged(async user=>{
