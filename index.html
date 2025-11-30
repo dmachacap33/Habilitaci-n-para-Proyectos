@@ -624,6 +624,25 @@ body.mobile-viewport header label,body.mobile-viewport header .inp,body.mobile-v
   </section>
   <section id="panel-usuarios" class="panel">
     <h2>Personal Registrado (<span id="usuarios-count">0</span>)</h2>
+    <div class="section" id="admin-email-section">
+      <div class="row" style="align-items:flex-start;gap:12px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:260px;">
+          <div class="row" style="align-items:center;gap:10px;flex-wrap:wrap;">
+            <h3 style="margin:0;">Administradores autorizados</h3>
+            <span class="badge muted">Solo administradores pueden editar</span>
+          </div>
+          <div class="note" style="margin:6px 0 12px;">Los correos en esta lista tienen acceso de administrador. Los cambios se guardan en Firebase y se comparten entre sesiones.</div>
+          <div class="row" style="gap:8px;flex-wrap:wrap;">
+            <input id="admin-email-input" class="inp" type="email" placeholder="correo@ejemplo.com" style="min-width:240px;flex:1;"/>
+            <button id="admin-email-add" class="btn" type="button">Añadir</button>
+          </div>
+        </div>
+        <div style="flex:1;min-width:240px;">
+          <label>Correos con rol administrador</label>
+          <div class="chips" id="admin-email-list"></div>
+        </div>
+      </div>
+    </div>
     <div id="usuarios-cards" class="cards"></div>
   </section>
 </div>
@@ -1617,6 +1636,9 @@ function findPersonaByCorreo(correo){
   if(!mail) return null;
   return PERSONAL_LIST.find(p=>(p.correo||"").toLowerCase()===mail) || null;
 }
+function normalizeEmail(email){
+  return (email || "").trim().toLowerCase();
+}
 </script>
 <script id="db-json" type="application/json"></script>
 
@@ -1886,9 +1908,9 @@ const LOCAL_CACHE_BACKUP_KEY = "dbCacheV4Backup";
 const REMOTE_CACHE_KEY = "dbCacheV4Remote";
 const CACHE_META_KEY = "dbCacheV4Meta";
 const LAST_PAYLOAD_KEY = "dbCacheV4LastPayload";
-const RESERVED_EMPRESAS = ["geminikeys","historial","sistema-1"]; // claves que no deben mostrarse en dashboard
+const RESERVED_EMPRESAS = ["geminikeys","historial","sistema-1", "config"]; // claves que no deben mostrarse en dashboard
 
-const RESERVED_ROOT_KEYS = new Set(["usuarios","historial","geminikeys","aiusers"]); // nodos controlados por módulos dedicados
+const RESERVED_ROOT_KEYS = new Set(["usuarios","historial","geminikeys","aiusers","config"]); // nodos controlados por módulos dedicados
 
 function empresaKeys(){
   return Object.keys(DBCACHE).filter(k=>{
@@ -1901,6 +1923,10 @@ function empresaKeys(){
 let CURRENT = JSON.parse(localStorage.getItem("currentV4")||"{}"); // { empresaClave, proyectoId }
 let USERS = JSON.parse(localStorage.getItem("usuariosApp")||"{}") || {};
 let USUARIO = JSON.parse(localStorage.getItem("usuarioActual") || sessionStorage.getItem("usuarioActual") || "null") || {nombre:"", correo:"", codigo:"", admin:false};
+const DEFAULT_ADMIN_EMAILS = ["david.machaca@ypfbtransporte.com.bo"];
+const ADMIN_LOCAL_KEY = "adminEmails";
+const storedAdminEmails = JSON.parse(localStorage.getItem(ADMIN_LOCAL_KEY) || "[]").map(normalizeEmail).filter(Boolean);
+let ADMIN_EMAILS = new Set(storedAdminEmails.length ? storedAdminEmails : DEFAULT_ADMIN_EMAILS.map(normalizeEmail));
 let READONLY = false;
 let ES_RESPONSABLE = false;
 let USER_ROLES = new Set();
@@ -2467,43 +2493,36 @@ function ensureUsuarioEnRegistro(user, nombrePreferido = "", codigoPreferido = "
   return Promise.resolve();
 }
 
-function handleSuccessfulLogin(user, remember, nombreManual = "") {
+async function handleSuccessfulLogin(user, remember, nombreManual = "") {
   if(!user) return;
+  await loadAdminEmails();
   const inputNombre = ($("#login-nombre")?.value || "").trim();
   const nombrePrevio = USUARIO?.nombre || "";
   const persona = findPersonaByCorreo(user.email||"");
   const nombreFinal = persona?.nombre || nombreManual || user.displayName || inputNombre || nombrePrevio || (user.email||"");
-  const correoLower = (user.email||"").toLowerCase();
-  const registroExistente = Object.values(USERS||{}).find(u=>(u.correo||"").toLowerCase()===correoLower);
+  const correoLower = normalizeEmail(user.email||"");
+  const registroExistente = Object.values(USERS||{}).find(u=>normalizeEmail(u.correo)===correoLower);
   const codigoPrevio = USUARIO?.codigo || "";
   const codigoFinal = persona?.codigo || codigoPrevio || registroExistente?.codigo || "";
+  const esAdmin = correoLower && ADMIN_EMAILS.has(correoLower);
 
   USUARIO = {
     uid: user.uid,
     nombre: nombreFinal,
     correo: user.email,
     codigo: codigoFinal,
-    admin: user.email === "david.machaca@ypfbtransporte.com.bo"
+    admin: !!esAdmin
   };
 
-  if (remember) {
-    localStorage.setItem("usuarioActual", JSON.stringify(USUARIO));
-
-    sessionStorage.removeItem("usuarioActual");
-
-  } else {
-    sessionStorage.setItem("usuarioActual", JSON.stringify(USUARIO));
-    localStorage.removeItem("usuarioActual");
-  }
-
+  persistUsuarioActual(remember);
 
   pendingRememberChoice = null;
   pendingNombreLogin = "";
 
-
   $("#userEmail").value = USUARIO.correo;
   $("#login-modal").style.display = "none";
   toggleAdminUI(USUARIO.admin);
+  renderAdminEmails();
   if (USUARIO.admin) {
     renderUsuarios();
     setTimeout(() => { iniciarAsistenteIA(); }, 1000);
@@ -2595,6 +2614,185 @@ function showLoginModal(){
   if(modal) modal.style.display="flex";
   const nombreInput=$("#login-nombre");
   if(nombreInput) nombreInput.focus();
+}
+
+function persistUsuarioActual(remember){
+  if(!USUARIO) return;
+  const serialized = JSON.stringify(USUARIO);
+  try{
+    if(remember){
+      localStorage.setItem("usuarioActual", serialized);
+      sessionStorage.removeItem("usuarioActual");
+    }else{
+      sessionStorage.setItem("usuarioActual", serialized);
+      localStorage.removeItem("usuarioActual");
+    }
+  }catch(err){
+    console.warn("No se pudo persistir el usuario activo:", err);
+  }
+}
+
+function syncUsuarioActualStorage(){
+  if(!USUARIO) return;
+  const serialized = JSON.stringify(USUARIO);
+  try{
+    if(localStorage.getItem("usuarioActual")){
+      localStorage.setItem("usuarioActual", serialized);
+    }
+    if(sessionStorage.getItem("usuarioActual")){
+      sessionStorage.setItem("usuarioActual", serialized);
+    }
+  }catch(err){
+    console.warn("No se pudo sincronizar el usuario activo:", err);
+  }
+}
+
+function updateAdminControlsState(){
+  const disabled = !USUARIO.admin;
+  const input = document.getElementById('admin-email-input');
+  const addBtn = document.getElementById('admin-email-add');
+  if(input) input.disabled = disabled;
+  if(addBtn) addBtn.disabled = disabled;
+  document.querySelectorAll('#admin-email-list button').forEach(btn=>{ btn.disabled = disabled; });
+}
+
+function renderAdminEmails(){
+  const cont=document.getElementById('admin-email-list');
+  if(!cont) return;
+  cont.innerHTML="";
+  Array.from(ADMIN_EMAILS).map(normalizeEmail).filter(Boolean).sort().forEach(email=>{
+    const chip=document.createElement('div');
+    chip.className='chip';
+    chip.style.display='flex';
+    chip.style.alignItems='center';
+    chip.style.gap='6px';
+    chip.textContent=email;
+    if(USUARIO.admin){
+      const btn=document.createElement('button');
+      btn.type='button';
+      btn.className='btn icon secondary';
+      btn.textContent='✕';
+      btn.style.padding='2px 8px';
+      btn.onclick=()=>removeAdminEmail(email);
+      chip.appendChild(btn);
+    }
+    cont.appendChild(chip);
+  });
+  updateAdminControlsState();
+}
+
+function saveAdminEmailsLocal(){
+  try{
+    localStorage.setItem(ADMIN_LOCAL_KEY, JSON.stringify(Array.from(ADMIN_EMAILS)));
+  }catch(err){
+    console.warn('No se pudo guardar la lista de admins en localStorage:', err);
+  }
+}
+
+function refreshCurrentAdminStatus(){
+  const correoLower = normalizeEmail(USUARIO?.correo || "");
+  const esAdmin = correoLower && ADMIN_EMAILS.has(correoLower);
+  if(USUARIO){
+    USUARIO.admin = !!esAdmin;
+    syncUsuarioActualStorage();
+  }
+  toggleAdminUI(!!esAdmin);
+  if(esAdmin){
+    READONLY = false;
+    toggleResponsableUI(false);
+  }else{
+    toggleResponsableUI(ES_RESPONSABLE);
+  }
+  updateAdminControlsState();
+}
+
+async function loadAdminEmails(){
+  const fallback = Array.from(ADMIN_EMAILS);
+  if(database){
+    try{
+      const snap = await database.ref('config/admins').once('value');
+      const data = snap.val();
+      let emails=[];
+      if(Array.isArray(data)){
+        emails=data;
+      }else if(data && typeof data==='object'){
+        emails = Object.values(data);
+      }
+      if(emails.length){
+        ADMIN_EMAILS = new Set(emails.map(normalizeEmail).filter(Boolean));
+      }else if(ADMIN_EMAILS.size===0){
+        ADMIN_EMAILS = new Set(DEFAULT_ADMIN_EMAILS.map(normalizeEmail));
+      }
+      saveAdminEmailsLocal();
+    }catch(err){
+      console.error('Error al leer admins de Firebase:', err);
+      ADMIN_EMAILS = new Set(fallback.map(normalizeEmail).filter(Boolean));
+    }
+  }
+  renderAdminEmails();
+  refreshCurrentAdminStatus();
+  return ADMIN_EMAILS;
+}
+
+async function persistAdminEmails(){
+  saveAdminEmailsLocal();
+  renderAdminEmails();
+  if(database){
+    try{
+      await database.ref('config/admins').set(Array.from(ADMIN_EMAILS));
+    }catch(err){
+      console.error('Error al guardar admins en Firebase:', err);
+      alert('No se pudo guardar la lista de administradores.');
+    }
+  }
+  refreshCurrentAdminStatus();
+}
+
+async function addAdminEmail(rawEmail){
+  if(!USUARIO.admin){
+    alert('Solo los administradores pueden modificar esta lista.');
+    return;
+  }
+  const email = normalizeEmail(rawEmail);
+  if(!email){
+    alert('Ingresa un correo válido.');
+    return;
+  }
+  if(ADMIN_EMAILS.has(email)){
+    alert('Ese correo ya está autorizado.');
+    return;
+  }
+  ADMIN_EMAILS.add(email);
+  await persistAdminEmails();
+  const input=document.getElementById('admin-email-input');
+  if(input) input.value="";
+}
+
+async function removeAdminEmail(email){
+  if(!USUARIO.admin){
+    alert('Solo los administradores pueden modificar esta lista.');
+    return;
+  }
+  const normalized = normalizeEmail(email);
+  if(!ADMIN_EMAILS.has(normalized)) return;
+  ADMIN_EMAILS.delete(normalized);
+  await persistAdminEmails();
+}
+
+function attachAdminListHandlers(){
+  const input=document.getElementById('admin-email-input');
+  const addBtn=document.getElementById('admin-email-add');
+  if(addBtn){
+    addBtn.addEventListener('click', ()=>addAdminEmail(input?.value||''));
+  }
+  if(input){
+    input.addEventListener('keydown', e=>{
+      if(e.key==='Enter'){
+        e.preventDefault();
+        addAdminEmail(input.value);
+      }
+    });
+  }
 }
 
 function renderUsuarios(){
@@ -5924,6 +6122,7 @@ function clearActiveSession(preserveLocal=false){
   USER_ROLES = new Set();
   toggleAdminUI(false);
   toggleResponsableUI(false);
+  updateAdminControlsState();
   const emailInput = $("#userEmail");
   if(emailInput) emailInput.value = "";
   GEMINI_API_KEY = '';
@@ -6108,17 +6307,19 @@ function pruebasSanitizeName() {
 function init(){
     populatePersonalList();
     attachLoginListeners();
+    attachAdminListHandlers();
     refreshEmpresaList();
     toggleAdminUI(false);
     toggleResponsableUI(false);
     setChatVisibility(false);
+    renderAdminEmails();
 
     if(auth){
-        auth.onAuthStateChanged(user=>{
+        auth.onAuthStateChanged(async user=>{
             if(user){
                 const remember = pendingRememberChoice!==null ? pendingRememberChoice : !!localStorage.getItem("usuarioActual");
                 const nombreManual = pendingNombreLogin || ($("#login-nombre")?.value || "").trim();
-                handleSuccessfulLogin(user, remember, nombreManual);
+                await handleSuccessfulLogin(user, remember, nombreManual);
             }else{
                 pendingRememberChoice = null;
                 pendingNombreLogin = "";
