@@ -3442,6 +3442,22 @@ function ensureProyecto(clave, pid){
   if(!pr.historial) pr.historial = [];
   return pr;
 }
+function ensureProyectoData(meta, clave, pid){
+  if(!meta) return {nombre:"", tipos:[], responsables:{}};
+  let data = meta.proyecto;
+  if(!data || typeof data !== 'object') data = {};
+  if(data.nombre == null) data.nombre = "";
+  if(!Array.isArray(data.tipos)) data.tipos = [];
+  if(!data.responsables || typeof data.responsables !== 'object') data.responsables = {};
+  if(!data.schema) data.schema = "ypfb.crm.v4.proyecto";
+  if(!data.version) data.version = 1;
+  if(clave && !data.empresaClave) data.empresaClave = clave;
+  if(pid && !data.proyectoId) data.proyectoId = pid;
+  if(!data.capturadoPor) data.capturadoPor = $("#userEmail").value || "";
+  if(!data.capturadoEn) data.capturadoEn = nowIso();
+  meta.proyecto = data;
+  return data;
+}
 function slugify(str){
   return str.toLowerCase()
             .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
@@ -4561,16 +4577,17 @@ function renderListaProyectos(){
   const tb=$("#tb-proyectos"); tb.innerHTML="";
   Object.keys(emp.proyectos||{}).forEach(pid=>{
     const pr = emp.proyectos[pid];
+    const proyectoInfo = ensureProyectoData(pr, clave, pid);
     const estado = estadoProyecto(pr);
     const tr = document.createElement("tr");
     const lastHist = pr.historial?.slice(-1)[0];
     const hist = lastHist
       ? `<div class="small hist-item">${lastHist.accion || ''} · Rev ${lastHist.rev || ''}</div>`
       : "";
-    const resp = pr.proyecto?.responsables || {};
+    const resp = proyectoInfo.responsables || {};
     tr.innerHTML = `
       <td>${pid}</td>
-      <td><input class="inp proj-name" data-pid="${pid}" value="${pr.proyecto?.nombre||""}"/></td>
+      <td><input class="inp proj-name" data-pid="${pid}" value="${proyectoInfo.nombre||""}"/></td>
       <td>
         <input class="inp proj-resp" data-pid="${pid}" data-role="sst" list="personal-list" value="${resp.sst?.nombre||""}"/>
         <div class="small">${resp.sst?.correo||""}</div>
@@ -4592,7 +4609,7 @@ function renderListaProyectos(){
           ${['CI','HP','DB','HV'].map(t=>`<label class="chip"><input type="checkbox" value="${t}" ${pr.proyecto?.tipos?.includes(t)?'checked':''}/> ${t}</label>`).join('')}
         </div>
       </td>
-      <td>${pr.proyecto?.creadoEn ? new Date(pr.proyecto.creadoEn).toLocaleDateString() : ""}</td>
+      <td>${proyectoInfo.creadoEn ? new Date(proyectoInfo.creadoEn).toLocaleDateString() : ""}</td>
       <td><span class="status ${cls(estado)}">${estado}</span></td>
       <td>${hist}</td>
       <td>
@@ -4607,15 +4624,19 @@ function renderListaProyectos(){
     tb.appendChild(tr);
     const inp = tr.querySelector(".proj-name");
     inp.addEventListener("change", e=>{
-      emp.proyectos[pid].proyecto.nombre = e.target.value.trim();
+      const meta = emp.proyectos[pid];
+      const info = ensureProyectoData(meta, clave, pid);
+      info.nombre = e.target.value.trim();
       persistDB(); renderDashboard(); renderYPFB();
     });
     tr.querySelectorAll(".proj-resp").forEach(inp=>{
       inp.addEventListener("change", e=>{
+        const meta = emp.proyectos[pid];
+        const info = ensureProyectoData(meta, clave, pid);
         const role = e.target.dataset.role; const name = e.target.value.trim();
         const per = PERSONAL_LIST.find(x=>x.nombre===name);
-        if(!pr.proyecto.responsables) pr.proyecto.responsables={};
-        pr.proyecto.responsables[role] = {nombre:name, correo:per?.correo||""};
+        if(!info.responsables) info.responsables={};
+        info.responsables[role] = {nombre:name, correo:per?.correo||""};
         persistDB(); renderYPFB(); renderListaProyectos();
       });
     });
@@ -4623,7 +4644,9 @@ function renderListaProyectos(){
     chipsInit(tipoSel);
     tr.querySelectorAll(`${tipoSel} .chip input`).forEach(ch=>{
       ch.addEventListener("change", ()=>{
-        pr.proyecto.tipos = getTiposFromChips(tipoSel);
+        const meta = emp.proyectos[pid];
+        const info = ensureProyectoData(meta, clave, pid);
+        info.tipos = getTiposFromChips(tipoSel);
         persistDB(); renderListaProyectos(); renderDashboard(); renderYPFB();
       });
     });
